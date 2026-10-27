@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calculiving - Agregador de Inmuebles con Costo Real</title>
+  <link rel="stylesheet" href="leaflet.css?v=5">
+  <link rel="stylesheet" href="styles.css?v=5">
+  <script src="leaflet.js?v=5"></script>
+</head>
+<body>
+
+  <!-- Top Header Navigation (Sin pestañas para saltar, solo flujo lineal y volver) -->
+  <header class="top-header">
+    <div class="header-container">
+      <div class="logo-brand" id="nav-brand-btn" title="Volver al Inicio">
+        <div class="logo-icon">C</div>
+        <div class="brand-info">
+          <h1>Calculiving</h1>
+          <span>Agregador Inmobiliario & Costo de Vida Real</span>
+        </div>
+      </div>
+
+      <div class="header-step-indicator">
+        <button class="header-back-btn" id="header-back-btn">← Volver</button>
+        <span class="current-step-badge" id="current-step-label">Tipo de Búsqueda</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-wrapper">
+
+    <!-- 1. HOME: 3 OPCIONES PRINCIPALES -->
+    <section class="screen active" id="screen-home">
+      <div class="home-hero">
+        <h2>¿Cómo querés empezar a buscar?</h2>
+        <p>Calculiving agrega publicaciones de portales y las filtra por tu layout deseado, zona delimitada por calles y costo de vida real.</p>
+      </div>
+
+      <div class="home-options-grid">
+        <!-- Opción A -->
+        <article class="option-card" id="btn-option-a">
+          <span class="option-badge">Opción A</span>
+          <div class="card-icon">💬</div>
+          <div>
+            <h3>Chatear con el bot</h3>
+            <p>Conversá en pantalla completa y describí en tus palabras qué características y estilo de vida buscás.</p>
+          </div>
+          <button class="card-action-btn">
+            <span>Iniciar Conversación</span>
+            <span>→</span>
+          </button>
+        </article>
+
+        <!-- Opción B -->
+        <article class="option-card" id="btn-option-b">
+          <span class="option-badge">Opción B</span>
+          <div class="card-icon">🔍</div>
+          <div>
+            <h3>Buscar personalmente</h3>
+            <p>Cargá los sitios web de búsqueda y delimitá en el mapa tu zona exacta calle por calle.</p>
+          </div>
+          <button class="card-action-btn">
+            <span>Cargar Sitios y Buscar</span>
+            <span>→</span>
+          </button>
+        </article>
+
+        <!-- Opción C -->
+        <article class="option-card" id="btn-option-c">
+          <span class="option-badge">Opción C</span>
+          <div class="card-icon">📐</div>
+          <div>
+            <h3>Armar tu lugar deseado</h3>
+            <p>Diseñá tu plano 2D arrastrando habitaciones, estirando medidas y definiendo ambientes prioritarios.</p>
+          </div>
+          <button class="card-action-btn">
+            <span>Abrir Editor de Plano</span>
+            <span>→</span>
+          </button>
+        </article>
+      </div>
+    </section>
+
+    <!-- OPCIÓN A: CHATEAR CON EL BOT EN PANTALLA COMPLETA (TIPO GEMINI) -->
+    <section class="screen" id="screen-bot-fullscreen">
+      <div class="bot-fullscreen-container">
+        <div class="bot-fullscreen-header">
+          <h2>Asistente Inmobiliario Calculiving</h2>
+          <p>Describí libremente tu objetivo o qué características precisás en tu próximo hogar.</p>
+        </div>
+
+        <div class="bot-chat-thread" id="fullscreen-chat-thread">
+          <div class="chat-msg bot">
+            <div class="avatar">🤖</div>
+            <div class="chat-bubble-content">
+              ¡Hola! Estoy acá para ayudarte a encontrar tu lugar ideal sin vueltas. 
+              Contame: <strong>¿qué estás buscando?</strong> (por ejemplo: si necesitás espacio para teletrabajo, balcón, cocina separada, cercanía a alguna línea de transporte o un presupuesto máximo mensual).
+            </div>
+          </div>
+        </div>
+
+        <div class="bot-quick-suggestions">
+          <button class="suggestion-pill" data-prompt="Busco un 2 ambientes luminoso con balcón para hacer home office">🏢 2 amb luminoso con balcón</button>
+          <button class="suggestion-pill" data-prompt="Quiero vivir cerca de subte con costo de vida accesible para mi sueldo">🚇 Cerca de subte con costo accesible</button>
+          <button class="suggestion-pill" data-prompt="Necesito 3 ambientes familiares con cochera en zona tranquila">🚗 3 amb familiares con cochera</button>
+        </div>
+
+        <div class="bot-input-area">
+          <input type="text" id="fullscreen-bot-input" placeholder="Escribí acá tu objetivo o requerimientos (ej: busco tranquilidad cerca de la facultad)...">
+          <button class="btn-sm btn-primary" id="fullscreen-bot-send-btn">Enviar</button>
+        </div>
+
+        <div class="bot-action-footer">
+          <button class="btn-sm btn-secondary" id="bot-back-home-btn">← Volver al inicio</button>
+          <button class="ready-btn" id="bot-proceed-portales-btn">Continuar a Cargar Sitios de Portales →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. PANTALLA: CARGAR PORTALES (RECTÁNGULO EN EL MEDIO CON PUNTAS CIRCULARES Y LISTA CONECTADA ARRIBA) -->
+    <section class="screen" id="screen-portales">
+      <div class="portales-centered-wrapper">
+        <div class="portales-hero-text">
+          <h2>Cargar portales de búsqueda</h2>
+          <p>Ingresá los sitios o portales generales donde querés que Calculiving agregue las propiedades para acotar la búsqueda.</p>
+        </div>
+
+        <!-- Caja conectada: Lista arriba + Rectángulo de input abajo -->
+        <div class="connected-portals-box">
+          
+          <!-- Lista conectada superior (se expande arriba a medida que se agregan links) -->
+          <div class="connected-portals-list" id="connected-portals-list">
+            <!-- Items generados dinámicamente con líneas divisorias más cortas y tenues -->
+          </div>
+
+          <!-- Rectángulo inferior con esquinas circulares y botón '+' en la punta derecha -->
+          <div class="connected-portal-input-rect">
+            <input type="text" id="portal-site-input" placeholder="Pegá el link o nombre del portal (ej: zonaprop.com.ar, argenprop.com)...">
+            <button type="button" class="circle-add-plus-btn" id="portal-add-circle-btn" title="Agregar portal">+</button>
+          </div>
+
+        </div>
+
+        <!-- Chips de prueba rápida para agregar sitios con un solo click -->
+        <div class="portal-presets-chips">
+          <span style="font-size: 0.8rem; color: var(--text-muted);">Portales sugeridos:</span>
+          <button type="button" class="portal-chip-btn" data-site="Zonaprop" data-url="zonaprop.com.ar">+ Zonaprop</button>
+          <button type="button" class="portal-chip-btn" data-site="Argenprop" data-url="argenprop.com">+ Argenprop</button>
+          <button type="button" class="portal-chip-btn" data-site="MercadoLibre Inmuebles" data-url="mercadolibre.com.ar/inmuebles">+ MercadoLibre</button>
+          <button type="button" class="portal-chip-btn" data-site="Remax Argentina" data-url="remax.com.ar">+ Remax</button>
+        </div>
+
+        <div class="portales-footer-bar">
+          <button class="btn-sm btn-secondary" id="portales-back-btn">← Volver</button>
+          <button class="ready-btn" id="portals-ready-btn">Listo → Definir zona de búsqueda</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. DÓNDE BUSCAR: MAPA INTERACTIVO (SIN CABECERA NI CASILLA DE BOT ARRIBA; BUBBLE SPEECH EN FILTRAR POR PRESUPUESTO) -->
+    <section class="screen" id="screen-metodo">
+      <div class="search-tabs-row">
+        <button class="search-tab-pill active" id="tab-btn-mapa">🗺️ Delimitar en el Mapa</button>
+        <button class="search-tab-pill" id="tab-btn-filtros">⚙️ Filtro común</button>
+      </div>
+
+      <!-- PESTAÑA MAPA -->
+      <div id="tab-content-mapa">
+        <div class="map-page-layout">
+          <!-- Sidebar del mapa -->
+          <aside class="map-control-panel">
+            <!-- 1. BUBBLE SPEECH EN FILTRAR POR PRESUPUESTO -->
+            <div class="sidebar-speech-bubble">
+              <div class="sidebar-speech-header">
+                <h4>💬 Filtrar por Presupuesto y Sueldo</h4>
+                <button type="button" class="btn-link-mini" id="open-cost-bot-btn" title="Ver fórmula de los 2 cálculos">📊 Fórmula</button>
+              </div>
+              <p class="sidebar-speech-msg">
+                Poné tu sueldo para que te marquemos con colores dónde te conviene vivir. Pasá el mouse o tocá una zona del mapa para ver su desglose y links filtrados.
+              </p>
+
+              <div style="margin-bottom:0.55rem;">
+                <label style="font-size:0.74rem; color:#bae6fd; font-weight:700; display:block; margin-bottom:0.2rem;">💵 Tu Sueldo Mensual (ARS):</label>
+                <div class="salary-input-wrapper" style="width:100%;">
+                  <span class="currency-symbol">$</span>
+                  <input type="number" id="global-salary-input" class="salary-input" style="width:100%;" value="1500000" step="50000" placeholder="Ej: 1500000">
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem; margin-bottom:0.55rem;">
+                <div>
+                  <label style="font-size:0.72rem; color:var(--text-secondary); display:block; margin-bottom:0.2rem;">Operación:</label>
+                  <select id="map-filter-operation" class="salary-input" style="width:100%; font-size:0.78rem; padding:0.3rem 0.45rem;">
+                    <option value="alquiler" selected>Alquiler</option>
+                    <option value="venta">Compra-Venta</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:0.72rem; color:var(--text-secondary); display:block; margin-bottom:0.2rem;">Tope Alquiler:</label>
+                  <input type="number" id="map-filter-max-price" class="salary-input" style="width:100%; font-size:0.78rem; padding:0.3rem 0.45rem;" value="950000" step="50000">
+                </div>
+              </div>
+
+              <button class="btn-sm btn-primary" id="apply-salary-btn" style="width:100%; margin-bottom:0.45rem;">
+                🎨 Actualizar Colores del Mapa
+              </button>
+
+              <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.72rem; color:#e2e8f0; cursor:pointer; background:rgba(15,23,42,0.55); padding:0.35rem 0.5rem; border-radius:4px;">
+                <input type="checkbox" id="hover-auto-navigate-toggle" checked>
+                <span>Abrir detalle al superponer mouse / tocar zona</span>
+              </label>
+            </div>
+
+            <!-- 2. DELIMITAR LÍMITES CALLE POR CALLE -->
+            <div>
+              <h4 style="font-size: 0.82rem; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.4rem; font-weight:700;">
+                Delimitar Límites Calle por Calle
+              </h4>
+              <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.6rem;">
+                Hacé click en las esquinas del mapa para trazar tu área libre siguiendo avenidas, vías o autopistas.
+              </p>
+              <div style="display:flex; flex-direction:column; gap:0.45rem;">
+                <button class="btn-sm btn-primary" id="btn-draw-freehand-polygon">✏️ Dibujar área libre en el mapa</button>
+                <button class="btn-sm btn-secondary" id="btn-clear-freehand-polygon">Borrar área delimitada</button>
+              </div>
+            </div>
+
+            <!-- 3. PUNTOS DE INTERÉS MÚLTIPLES (AGREGAR CON + Y VER RUTAS NÍTIDAS AL PASAR EL MOUSE / TOCAR) -->
+            <div>
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.35rem;">
+                <h4 style="font-size: 0.82rem; text-transform: uppercase; color: var(--text-muted); font-weight:700;">
+                  Puntos de Interés
+                </h4>
+                <span style="font-size:0.68rem; color:var(--accent-cyan); font-weight:700;" id="pois-count-badge">3 activos</span>
+              </div>
+              <p style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.5rem; line-height:1.35;">
+                Sumá todos los puntos que quieras con <strong>+</strong>. <strong>Pasá el mouse o tocá un punto</strong> para atenuar el resto del mapa y ver con colores nítidos las rutas en <strong>🚗 Auto, 🚇 Subte, 🚌 Colectivo y 🚶 Caminando</strong>.
+              </p>
+
+              <!-- Barra para sumar nuevos Puntos de Interés con botón + -->
+              <div style="display:flex; gap:0.35rem; margin-bottom:0.5rem;">
+                <input type="text" id="new-poi-name-input" class="salary-input" placeholder="Nombre del nuevo punto (ej: Gym, Abuelos)..." style="flex:1; font-size:0.76rem; padding:0.35rem 0.55rem;">
+                <button type="button" id="btn-add-poi" class="btn-sm btn-primary" title="Sumar nuevo Punto de Interés al mapa" style="width:34px; height:34px; border-radius:50%; padding:0; display:flex; align-items:center; justify-content:center; font-size:1.15rem; font-weight:900; flex-shrink:0;">+</button>
+              </div>
+
+              <!-- Lista dinámica de Puntos de Interés -->
+              <div id="pois-list-container" style="display:flex; flex-direction:column; gap:0.4rem; max-height:210px; overflow-y:auto; padding-right:2px;">
+                <!-- Generado dinámicamente por app.js -->
+              </div>
+            </div>
+
+            <!-- Leyenda Semafórica -->
+            <div style="background:var(--bg-primary); padding:0.55rem; border-radius:var(--radius-sm); font-size:0.72rem; display:grid; grid-template-columns:1fr 1fr; gap:0.3rem;">
+              <span>🟢 <strong>Verde:</strong> Accesible</span>
+              <span>🟡 <strong>Amarillo:</strong> Medio</span>
+              <span>🟠 <strong>Naranja:</strong> Exigente</span>
+              <span>🔴 <strong>Rojo:</strong> Supera sueldo</span>
+            </div>
+
+            <button class="btn-primary" id="btn-map-go-results" style="padding:0.75rem; font-weight:700; border-radius:var(--radius-sm); border:none; cursor:pointer;">
+              Ver Desglose Zonal y Links Filtrados →
+            </button>
+          </aside>
+
+          <!-- Contenedor del Mapa Real Fair-Use (OpenStreetMap / Carto / Esri con Proxy Local + Sub-Zonas Orgánicas + Rutas Nítidas) -->
+          <div class="map-container-box" id="map-outer-box">
+            <div class="map-top-controls-overlay" style="display:flex; justify-content:space-between; align-items:center; width:calc(100% - 90px); left:55px; right:16px; pointer-events:none;">
+              <span class="map-hint-pill" style="pointer-events:auto;">
+                🖱️ Pasá el mouse o tocá una <strong>zona</strong> para ver su desglose, o un <strong>punto</strong> para iluminar las rutas de viaje
+              </span>
+              <div style="pointer-events:auto; display:flex; gap:0.35rem; background:rgba(15,23,42,0.92); padding:0.25rem; border-radius:999px; border:1px solid rgba(56,189,248,0.4);">
+                <button type="button" class="btn-sm map-tile-switch active" data-provider="osm" style="font-size:0.7rem; padding:0.2rem 0.6rem; border-radius:999px; background:#0284c7; color:#fff; border:none; cursor:pointer;">🗺️ OpenStreetMap (Fair Use)</button>
+                <button type="button" class="btn-sm map-tile-switch" data-provider="carto" style="font-size:0.7rem; padding:0.2rem 0.6rem; border-radius:999px; background:transparent; color:#cbd5e1; border:none; cursor:pointer;">✨ Carto Claridad</button>
+                <button type="button" class="btn-sm map-tile-switch" data-provider="esri" style="font-size:0.7rem; padding:0.2rem 0.6rem; border-radius:999px; background:transparent; color:#cbd5e1; border:none; cursor:pointer;">🛣️ Esri Callejero</button>
+              </div>
+            </div>
+
+            <!-- Leyenda flotante de Rutas Multi-Modales cuando se ilumina un Punto de Interés -->
+            <div id="map-routes-legend" class="map-routes-legend" style="display:none;">
+              <!-- Se completa dinámicamente al pasar el mouse o tocar un Punto de Interés -->
+            </div>
+
+            <!-- Barra flotante durante el trazado de polígono -->
+            <div class="map-floating-bar" id="map-drawing-helper-bar">
+              <span id="drawing-points-count-label">📍 Hacé click en las calles del mapa para marcar vértices (0 puntos)</span>
+              <button class="btn-sm btn-primary" id="btn-finish-drawn-polygon">✓ Cerrar área y ver análisis</button>
+              <button class="btn-sm btn-secondary" id="btn-cancel-drawn-polygon">✕ Cancelar</button>
+            </div>
+
+            <!-- Tooltip Flotante al pasar el mouse por encima de una zona (Alquiler arriba + Coste de vida y gastos alrededor abajo) -->
+            <div class="map-hover-tooltip" id="map-hover-tooltip"></div>
+
+            <!-- MAPA REAL LIBRE DE USO (LEAFLET + OPENSTREETMAP CON CACHÉ LOCAL) -->
+            <div id="leaflet-map" class="leaflet-map-canvas"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PESTAÑA FILTRO COMÚN -->
+      <div id="tab-content-filtros" style="display: none;">
+        <div style="max-width: 800px; margin: 1.5rem auto; background: var(--card-bg); border: 1px solid var(--card-border); padding: 2rem; border-radius: var(--radius-md);">
+          <h3 style="margin-bottom: 1.25rem;">Filtros tradicionales</h3>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+            <div>
+              <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">Operación:</label>
+              <select id="filter-operation" class="salary-input" style="width: 100%;">
+                <option value="alquiler" selected>Alquiler</option>
+                <option value="venta">Compra-Venta</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">Presupuesto Máximo (ARS):</label>
+              <input type="number" id="filter-max-price" class="salary-input" style="width: 100%;" value="1600000" step="50000">
+            </div>
+            <div>
+              <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">Ambientes:</label>
+              <select id="filter-min-rooms" class="salary-input" style="width: 100%;">
+                <option value="1">1 o más</option>
+                <option value="2">2 o más</option>
+                <option value="3" selected>3 o más</option>
+              </select>
+            </div>
+          </div>
+          <div style="margin-top: 1.5rem; text-align: right;">
+            <button class="ready-btn" id="btn-filter-go-results">Aplicar y Ver Resultados →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. EDITOR DE PLANO (OPCIÓN C): 25% SIDEBAR IZQUIERDO / 75% CANVAS DERECHO -->
+    <section class="screen" id="screen-editor">
+      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+        <div>
+          <h2 style="font-size: 1.75rem; font-weight: 800;">Editor de plano interactivo</h2>
+          <p style="color: var(--text-secondary); font-size: 0.95rem;">
+            Arrastrá cada habitación sobre el plano para definir su ubicación física. Estirá las puntas para ajustar proporciones rectangulares o formas atípicas.
+          </p>
+        </div>
+        <button class="ready-btn" id="btn-editor-search-results">
+          🔍 Buscar inmuebles con este layout →
+        </button>
+      </div>
+
+      <div class="floor-editor-desktop-layout">
+        <!-- 25% SIDEBAR IZQUIERDO: PISOS, PALETA Y AJUSTES -->
+        <aside class="editor-sidebar-25">
+          <!-- Gestión de Pisos con Eliminar -->
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <h4 style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">
+                Pisos
+              </h4>
+              <button class="btn-sm btn-secondary" id="btn-delete-floor" style="color:#f87171; padding:0.2rem 0.5rem; font-size:0.75rem;" title="Eliminar piso actual">
+                🗑️ Eliminar piso
+              </button>
+            </div>
+            <div class="floor-mgmt-row" id="floor-tabs-row">
+              <button class="floor-btn-pill active" data-floor="1">Piso 1</button>
+              <button class="btn-sm btn-secondary" id="btn-add-floor-pill">+ Agregar piso</button>
+            </div>
+          </div>
+
+          <!-- Piezas Precargadas Limpias (Cocina, Baño, Pasillo, Living, Habitación, Cochera) -->
+          <div>
+            <h4 style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 0.5rem;">
+              Agregar Habitación al Plano
+            </h4>
+            <div class="pieces-palette-grid">
+              <button class="piece-btn" data-type="cocina"><span>🍳</span> Cocina</button>
+              <button class="piece-btn" data-type="baño"><span>🚿</span> Baño</button>
+              <button class="piece-btn" data-type="pasillo"><span>🚪</span> Pasillo</button>
+              <button class="piece-btn" data-type="living"><span>🛋️</span> Living</button>
+              <button class="piece-btn" data-type="habitacion"><span>🛏️</span> Habitación</button>
+              <button class="piece-btn" data-type="cochera"><span>🚗</span> Cochera</button>
+            </div>
+          </div>
+
+          <!-- Inspector del Ambiente Seleccionado -->
+          <div id="inspector-panel" style="background:var(--bg-primary); padding:0.85rem; border-radius:var(--radius-sm); border:1px solid var(--card-border);">
+            <h4 style="font-size: 0.8rem; color: var(--accent-cyan); font-weight: 700; margin-bottom: 0.5rem;" id="inspector-room-title">
+              Ambiente Seleccionado
+            </h4>
+            <div style="display:flex; flex-direction:column; gap:0.6rem; font-size:0.785rem;">
+              <div>
+                <label style="color:var(--text-muted);">Ancho (m):</label>
+                <input type="range" id="inspector-width-slider" min="1.0" max="12.0" step="0.2" value="4.0" style="width:100%; accent-color:var(--accent-cyan);">
+                <span id="inspector-width-val" style="font-weight:700;">4.0 m</span>
+              </div>
+              <div>
+                <label style="color:var(--text-muted);">Largo (m):</label>
+                <input type="range" id="inspector-length-slider" min="1.0" max="14.0" step="0.2" value="3.5" style="width:100%; accent-color:var(--accent-cyan);">
+                <span id="inspector-length-val" style="font-weight:700;">3.5 m</span>
+              </div>
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-top:0.3rem;">
+                <label style="display:flex; align-items:center; gap:0.4rem; color:var(--warning); cursor:pointer; font-weight:700;">
+                  <input type="checkbox" id="inspector-priority-toggle">
+                  <span>Prioritario ⭐</span>
+                </label>
+                <button class="btn-sm btn-secondary" id="inspector-delete-room" style="color:#f87171; padding:0.2rem 0.5rem;">Eliminar</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Resumen de Layout -->
+          <div style="font-size:0.78rem; color:var(--text-secondary);">
+            Ambientes en piso: <strong id="editor-rooms-count" style="color:#fff;">0</strong><br>
+            Superficie total: <strong id="editor-area-sum" style="color:var(--accent-cyan);">0 m²</strong>
+          </div>
+        </aside>
+
+        <!-- 75% CANVAS DERECHO: GRILLED TECHNICAL BLUEPRINT -->
+        <div class="editor-canvas-75" id="editor-interactive-canvas">
+          <div class="canvas-top-indicator">
+            📐 Distribución espacial: <span id="canvas-floor-label" style="color:var(--accent-cyan);">Piso 1</span> 
+            <span style="font-size:0.75rem; font-weight:normal; color:var(--text-muted); margin-left:8px;">(Arrastrá para ubicar y estirá de las esquinas)</span>
+          </div>
+
+          <!-- Rendered 2D Draggable and Resizable Room Boxes -->
+          <div id="canvas-rooms-container"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. RESULTADOS: DESGLOSE EXTENSO DE VIVIENDA (ALQUILER + IMPUESTOS/SERVICIOS), COMERCIOS Y LINKS AL FINAL -->
+    <section class="screen" id="screen-resultados">
+      <div class="results-top-bar">
+        <div>
+          <h2 style="font-size: 1.4rem; font-weight: 800;" id="results-main-heading">Desglose Genuino de Vivienda, Comercios del Barrio y Portales</h2>
+          <span style="font-size: 0.825rem; color: var(--text-secondary);" id="results-meta-count">
+            Seleccioná cualquier sub-zona para comparar cuánto cuesta genuinamente el alquiler + impuestos/servicios, qué plata manejar en los comercios y abrir tus portales filtrados.
+          </span>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:0.85rem; flex-wrap:wrap;">
+          <button type="button" class="btn-sm btn-secondary" id="btn-back-to-map-direct">🗺️ ← Volver al Mapa</button>
+
+          <!-- Ordenar sub-zonas por cercanía a puntos o precio -->
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <label for="sort-select-input" style="font-size:0.82rem; font-weight:600; color:var(--text-secondary);">Ordenar sub-zonas por:</label>
+            <select id="sort-select-input" class="salary-input" style="width: auto; font-size:0.8rem;">
+              <optgroup label="Cercanía a Puntos de Interés" id="sort-pois-optgroup">
+                <option value="cercania_todos" selected>Cercanía: A todos tus puntos marcados</option>
+                <option value="cercania_a">Cercanía: Al Punto A</option>
+                <option value="cercania_b">Cercanía: Al Punto B</option>
+                <option value="cercania_c">Cercanía: Al Punto C</option>
+                <option value="perm_abc">Secuencial: A &gt; B &gt; C</option>
+                <option value="perm_bac">Secuencial: B &gt; A &gt; C</option>
+                <option value="perm_cab">Secuencial: C &gt; A &gt; B</option>
+              </optgroup>
+              <optgroup label="Costo Genuino de Vivienda">
+                <option value="precio_asc">Vivienda Total: Menor → Mayor</option>
+                <option value="precio_desc">Vivienda Total: Mayor → Menor</option>
+              </optgroup>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Barra rápida para cambiar entre las sub-zonas del mapa ordenadas -->
+      <div id="results-zones-pills-bar" style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1.25rem;"></div>
+
+      <!-- PANEL PRINCIPAL DE ZONA SELECCIONADA:
+           1) ARRIBA: Cuánto cuesta genuinamente la vivienda (Alquiler + Expensas + Impuestos y Servicios todo junto)
+           2) ABAJO: Costo de vivir en cuanto a los comercios de los alrededores (precios esperables en la zona, sin columna obvia de qué venden)
+           3) POR QUÉ CONVIENE O NO VIVIR EN ESTA ZONA
+           4) AL FINAL: Links que redirigen a las páginas cargadas con los filtros ya aplicados -->
+      <div id="focused-zone-deep-dive" style="margin-bottom: 2.5rem;"></div>
+    </section>
+
+  </main>
+
+  <!-- Modal: Explicación de Costo de Vida del Bot -->
+  <div class="modal-overlay" id="cost-explanation-modal">
+    <div class="modal-content">
+      <button class="close-modal-btn" id="close-cost-modal-btn">✕</button>
+      <div style="display:flex; align-items:center; gap:0.6rem; margin-bottom:1rem;">
+        <span style="font-size:1.6rem;">📊</span>
+        <h3 style="font-size:1.25rem;">¿Cómo se calculan el Costo Genuino de Vivienda y los Comercios del Barrio?</h3>
+      </div>
+      <div style="font-size:0.875rem; color:var(--text-secondary); line-height:1.6;" id="cost-modal-body"></div>
+      <div style="margin-top:1.5rem; text-align:right;">
+        <button class="btn-sm btn-primary" id="cost-modal-ok-btn">Entendido</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="data.js?v=5"></script>
+  <script src="app.js?v=5"></script>
+</body>
+</html>
