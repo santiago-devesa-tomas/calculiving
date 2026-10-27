@@ -30,15 +30,36 @@ const appState = {
   ],
   selectedRoomId: "room-1",
   pois: [
-    { id: "poi-1", code: "A", label: "Punto A", lat: -34.5985, lng: -58.3830, color: "#ef4444" },
-    { id: "poi-2", code: "B", label: "Punto B", lat: -34.5880, lng: -58.4100, color: "#3b82f6" },
-    { id: "poi-3", code: "C", label: "Punto C", lat: -34.5760, lng: -58.4265, color: "#10b981" }
+    { id: "poi-1", code: "A", label: "Punto A", address: "Av. Córdoba 2100 (Facultad / Centro)", lat: -34.5992, lng: -58.3975, color: "#ef4444" },
+    { id: "poi-2", code: "B", label: "Punto B", address: "Av. Santa Fe 3200 (Alto Palermo)", lat: -34.5880, lng: -58.4100, color: "#3b82f6" },
+    { id: "poi-3", code: "C", label: "Punto C", address: "Av. Santa Fe y Juan B. Justo (Pacífico)", lat: -34.5775, lng: -58.4265, color: "#10b981" }
   ],
   activeHighlightedPoiId: null,
+  mentionedBarrioSlug: null,
   drawnPolygonPoints: [],
   drawnPolygonLayer: null,
   isDrawingMode: false,
-  sortOption: "cercania_todos"
+  sortOption: "cercania_todos",
+  classicFilters: {
+    operation: "alquiler",
+    currency: "ARS",
+    minPrice: 0,
+    maxPrice: 950000,
+    maxExpensas: 180000,
+    propertyType: "departamento",
+    disposition: "indistinto",
+    orientation: "indistinto",
+    antiquity: "indistinto",
+    minRooms: 2,
+    bedrooms: 1,
+    bathrooms: 1,
+    minM2Covered: 42,
+    maxM2Total: 120,
+    garage: "indistinto",
+    features: ["Balcón corrido / aterrazado", "Cocina separada (no integrada)"],
+    amenities: [],
+    requirements: ["Apto mascotas", "Acepta seguro de caución"]
+  }
 };
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -146,11 +167,16 @@ function setupNavigationFlow() {
     navigateTo("screen-resultados");
   });
   document.getElementById("btn-filter-go-results")?.addEventListener("click", () => {
-    appState.selectedOperation = document.getElementById("filter-operation").value;
-    appState.maxPrice = parseFloat(document.getElementById("filter-max-price").value) || 2000000;
-    appState.minRooms = parseInt(document.getElementById("filter-min-rooms").value) || 1;
+    readClassicFiltersFromDOM();
     executeFilterAndRender();
     navigateTo("screen-resultados");
+  });
+  document.getElementById("btn-switch-to-map-from-filters")?.addEventListener("click", () => {
+    readClassicFiltersFromDOM();
+    document.getElementById("tab-btn-mapa")?.click();
+  });
+  document.getElementById("btn-reset-classic-filters")?.addEventListener("click", () => {
+    resetClassicFiltersForm();
   });
   document.getElementById("btn-editor-search-results")?.addEventListener("click", () => {
     executeFilterAndRender();
@@ -839,6 +865,42 @@ const MAP_AFFORDABILITY_ZONES = [
       { tipo: "🏋️ Clubes y Gimnasios con Piscina Climatizada", valores: "Cuota mensual: $54.000", mensual_ars: 32000 }
     ],
     gastos_alrededor_detalle: "Subte D (Bulnes / Pueyrredón) y Subte H (Las Heras / Parque Las Heras). Alícuota máxima de ABL y expensas."
+  },
+  {
+    id: "zona-belgrano-r",
+    slug: "belgrano",
+    name: "Belgrano R / Coghlan (Cruzando Av. Crámer y Vías del Mitre al Oeste)",
+    urban_boundary_note: "Delimitado por Av. Crámer, Av. Monroe, Av. de los Incas, Av. Álvarez Thomas y Vías del Ferrocarril Mitre (Ramal José León Suárez).",
+    bridge_price_effect: "Cruzando Av. Crámer y las vías del Tren Mitre hacia Belgrano R / Melián, baja la densidad comercial respecto a Av. Cabildo y el alquiler de departamentos de 2-3 amb baja un ~16% con expensas menores.",
+    coords: [
+      [-34.5615, -58.4645],
+      [-34.5685, -58.4565],
+      [-34.5735, -58.4605],
+      [-34.5765, -58.4725],
+      [-34.5665, -58.4775],
+      [-34.5585, -58.4715]
+    ],
+    alquiler_ars: 690000,
+    expensas_ars: 135000,
+    servicios_ars: 68000,
+    canasta_comercios_ars: 285000,
+    transporte_ars: 37000,
+    impuestos_y_servicios: {
+      abl_municipal_ars: 18500,
+      luz_edenor_edesur_ars: 18500,
+      gas_metrogas_ars: 10500,
+      agua_aysa_ars: 9500,
+      internet_fibra_ars: 11000
+    },
+    locales_cercanos: [
+      { tipo: "🛒 Supermercados y Almacenes (Av. Crámer / Av. Monroe)", valores: "Leche 1L: $1.490 | Queso tybo 1kg: $9.400 | Yerba 1kg: $3.750", mensual_ars: 102000 },
+      { tipo: "🥩 Carnicerías y Granja (Juramento / Superí)", valores: "Asado/Vacío 1kg: $10.100 | Suprema 1kg: $6.900 | Maple huevos: $4.600", mensual_ars: 68000 },
+      { tipo: "🥬 Verdulerías y Fruterías (Plaza Castelli / Av. de los Incas)", valores: "Papa 1kg: $1.100 | Tomate 1kg: $2.150 | Fruta estación 1kg: $2.100", mensual_ars: 39000 },
+      { tipo: "🥖 Panaderías y Cafeterías frente a Estación Belgrano R", valores: "Pan artesanal 1kg: $3.000 | Café + medialunas: $4.600", mensual_ars: 29000 },
+      { tipo: "🧺 Tintorerías, Veterinarias y Farmacias (Conde / Freire)", valores: "Valet ropa: $5.900 | Insumos limpieza y cuidado: $16.500", mensual_ars: 21000 },
+      { tipo: "🏋️ Club Belgrano Athletic y Gimnasios de Barrio", valores: "Cuota mensual: $36.000", mensual_ars: 26000 }
+    ],
+    gastos_alrededor_detalle: "Estación Belgrano R (Tren Mitre), cercanía a Subte B (De los Incas) y Subte D (Juramento por Crámer). Calles residenciales arboladas."
   }
 ];
 
@@ -850,10 +912,211 @@ function getZoneCenter(zone) {
   return [lat, lng];
 }
 
+// Re-indexa siempre los Puntos de Interés en orden correlativo (A, B, C, D...) cada vez que se borra o agrega uno
+function reindexPois() {
+  appState.pois.forEach((poi, idx) => {
+    const newCode = String.fromCharCode(65 + (idx % 26));
+    const oldCode = poi.code;
+    poi.code = newCode;
+    poi.color = POI_PALETTE[idx % POI_PALETTE.length];
+    // Si tenía el nombre genérico "Punto X", lo actualiza a la nueva letra ("Punto A", "Punto B", etc.)
+    if (!poi.label || /^Punto [A-Z]$/i.test(poi.label.trim()) || poi.label.trim() === `Punto ${oldCode}`) {
+      poi.label = `Punto ${newCode}`;
+    }
+  });
+}
+
+// Geocodificador de direcciones, avenidas con altura y esquinas de CABA (instantáneo local + fallback a OpenStreetMap Nominatim)
+async function geocodeAddressInCaba(rawAddress) {
+  const text = (rawAddress || "").trim();
+  if (!text) return null;
+  const lower = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  // 1. Puntos de referencia, esquinas famosas y estaciones
+  const landmarks = [
+    { keys: ["obelisco", "9 de julio y corrientes", "corrientes y 9 de julio"], lat: -34.6037, lng: -58.3816, formatted: "Obelisco (Av. 9 de Julio y Av. Corrientes)" },
+    { keys: ["cabildo y juramento", "juramento y cabildo"], lat: -34.5622, lng: -58.4565, formatted: "Av. Cabildo y Av. Juramento (Belgrano)" },
+    { keys: ["acoyte y rivadavia", "rivadavia y acoyte", "primera junta"], lat: -34.6182, lng: -58.4368, formatted: "Av. Rivadavia y Av. Acoyte (Caballito)" },
+    { keys: ["corrientes y medrano", "medrano y corrientes"], lat: -34.6036, lng: -58.4208, formatted: "Av. Corrientes y Av. Medrano (Almagro)" },
+    { keys: ["cordoba y medrano", "medrano y cordoba"], lat: -34.5988, lng: -58.4205, formatted: "Av. Córdoba y Av. Medrano (Almagro Norte)" },
+    { keys: ["corrientes y scalabrini", "scalabrini ortiz y corrientes", "malabia"], lat: -34.5982, lng: -58.4392, formatted: "Av. Corrientes y Av. Scalabrini Ortiz (Villa Crespo)" },
+    { keys: ["santa fe y juan b justo", "puente pacifico", "pacifico", "palermo"], lat: -34.5782, lng: -58.4258, formatted: "Av. Santa Fe y Av. Juan B. Justo (Puente Pacífico)" },
+    { keys: ["plaza italia", "santa fe y sarmiento", "rural"], lat: -34.5815, lng: -58.4208, formatted: "Plaza Italia (Palermo)" },
+    { keys: ["plaza serrano", "cortazar", "serrano y honduras"], lat: -34.5885, lng: -58.4305, formatted: "Plaza Serrano / Honduras (Palermo Soho)" },
+    { keys: ["parque centenario", "diaz velez", "angel gallardo"], lat: -34.6065, lng: -58.4355, formatted: "Parque Centenario (Caballito / Almagro)" },
+    { keys: ["parque rivadavia"], lat: -34.6175, lng: -58.4342, formatted: "Parque Rivadavia (Caballito)" },
+    { keys: ["pedro goyena", "goyena"], lat: -34.6242, lng: -58.4395, formatted: "Av. Pedro Goyena 800 (Caballito Sur)" },
+    { keys: ["retiro", "estacion retiro", "libertador 100"], lat: -34.5912, lng: -58.3745, formatted: "Estación Retiro" },
+    { keys: ["constitucion", "estacion constitucion"], lat: -34.6275, lng: -58.3812, formatted: "Estación Constitución" },
+    { keys: ["once", "plaza miserere", "pueyrredon y rivadavia"], lat: -34.6098, lng: -58.4062, formatted: "Plaza Miserere / Once (Av. Rivadavia y Av. Pueyrredón)" },
+    { keys: ["congreso", "callao y rivadavia"], lat: -34.6092, lng: -58.3922, formatted: "Congreso (Av. Callao y Av. Rivadavia)" },
+    { keys: ["ciudad universitaria", "fadu", "exactas", "nuñez"], lat: -34.5425, lng: -58.4415, formatted: "Ciudad Universitaria (UBA)" },
+    { keys: ["facultad de medicina", "fmed", "economicas", "cordoba 2100", "plaza houssay"], lat: -34.5992, lng: -58.3978, formatted: "Plaza Houssay / Av. Córdoba 2100" },
+    { keys: ["ingenieria", "fiuba", "paseo colon 850", "las heras 2200"], lat: -34.5885, lng: -58.3965, formatted: "Av. Las Heras 2200 (Recoleta)" },
+    { keys: ["utn", "medrano 951"], lat: -34.5985, lng: -58.4202, formatted: "UTN (Av. Medrano 951, Almagro)" },
+    { keys: ["puerto madero"], lat: -34.6085, lng: -58.3635, formatted: "Puerto Madero" },
+    { keys: ["recoleta", "las heras", "santa fe y callao"], lat: -34.5895, lng: -58.3935, formatted: "Recoleta (Av. Las Heras / Av. Callao)" },
+    { keys: ["colegiales", "lacroze", "alvarez thomas"], lat: -34.5752, lng: -58.4492, formatted: "Av. Federico Lacroze y Av. Álvarez Thomas (Colegiales)" },
+    { keys: ["belgrano r", "melian", "cramer"], lat: -34.5675, lng: -58.4665, formatted: "Estación Belgrano R (Av. Crámer / Melián)" },
+    { keys: ["barrio chino", "arribenos", "barrancas de belgrano"], lat: -34.5582, lng: -58.4495, formatted: "Barrancas de Belgrano / Barrio Chino" }
+  ];
+
+  for (const lm of landmarks) {
+    if (lm.keys.some(k => lower.includes(k))) {
+      return { lat: lm.lat, lng: lm.lng, formatted: text };
+    }
+  }
+
+  // 2. Interpolación por Avenida / Calle de CABA + Altura numérica (ej: "Av. Corrientes 3200", "Santa Fe 2400", "Rivadavia 5100", "Cabildo 2000")
+  const numMatch = lower.match(/\b(\d{2,4})\b/);
+  const streetNum = numMatch ? parseInt(numMatch[1], 10) : null;
+
+  const streetCorridors = [
+    { keys: ["corrientes"], startNum: 100, endNum: 6500, start: [-34.6036, -58.3700], end: [-34.5895, -58.4545] },
+    { keys: ["cordoba"], startNum: 100, endNum: 6200, start: [-34.5990, -58.3700], end: [-34.5815, -58.4485] },
+    { keys: ["santa fe"], startNum: 500, endNum: 5300, start: [-34.5955, -58.3755], end: [-34.5735, -58.4335] },
+    { keys: ["cabildo"], startNum: 1, endNum: 4900, start: [-34.5735, -58.4335], end: [-34.5375, -58.4765] },
+    { keys: ["rivadavia"], startNum: 100, endNum: 7500, start: [-34.6082, -58.3720], end: [-34.6295, -58.4685] },
+    { keys: ["libertador"], startNum: 100, endNum: 8500, start: [-34.5905, -58.3765], end: [-34.5385, -58.4660] },
+    { keys: ["juan b justo", "juan b. justo"], startNum: 1000, endNum: 6000, start: [-34.5775, -58.4255], end: [-34.6195, -58.4675] },
+    { keys: ["scalabrini", "scalabrini ortiz"], startNum: 100, endNum: 3400, start: [-34.6035, -58.4360], end: [-34.5715, -58.4105] },
+    { keys: ["medrano"], startNum: 1, endNum: 2000, start: [-34.6112, -58.4205], end: [-34.5915, -58.4185] },
+    { keys: ["boedo"], startNum: 1, endNum: 2100, start: [-34.6115, -58.4190], end: [-34.6325, -58.4175] },
+    { keys: ["acoyte"], startNum: 1, endNum: 1700, start: [-34.6182, -58.4368], end: [-34.6025, -58.4425] },
+    { keys: ["directorio"], startNum: 1, endNum: 4500, start: [-34.6262, -58.4265], end: [-34.6395, -58.4755] },
+    { keys: ["independencia"], startNum: 100, endNum: 4400, start: [-34.6170, -58.3700], end: [-34.6210, -58.4285] },
+    { keys: ["belgrano"], startNum: 100, endNum: 4300, start: [-34.6128, -58.3700], end: [-34.6152, -58.4275] },
+    { keys: ["callao"], startNum: 1, endNum: 2100, start: [-34.6092, -58.3922], end: [-34.5865, -58.3905] },
+    { keys: ["pueyrredon"], startNum: 1, endNum: 2600, start: [-34.6098, -58.4062], end: [-34.5825, -58.3970] }
+  ];
+
+  for (const st of streetCorridors) {
+    if (st.keys.some(k => lower.includes(k))) {
+      const n = streetNum !== null ? streetNum : Math.round((st.startNum + st.endNum) / 2);
+      const t = Math.max(0, Math.min(1, (n - st.startNum) / Math.max(1, st.endNum - st.startNum)));
+      const lat = parseFloat((st.start[0] + (st.end[0] - st.start[0]) * t).toFixed(5));
+      const lng = parseFloat((st.start[1] + (st.end[1] - st.start[1]) * t).toFixed(5));
+      return { lat, lng, formatted: text };
+    }
+  }
+
+  // 3. Fallback a OpenStreetMap Nominatim (para cualquier otra calle o dirección exacta en CABA)
+  try {
+    const q = encodeURIComponent(`${text}, Ciudad Autónoma de Buenos Aires, Argentina`);
+    const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${q}`);
+    if (resp.ok) {
+      const results = await resp.json();
+      if (Array.isArray(results) && results.length > 0) {
+        return {
+          lat: parseFloat(parseFloat(results[0].lat).toFixed(5)),
+          lng: parseFloat(parseFloat(results[0].lon).toFixed(5)),
+          formatted: text
+        };
+      }
+    }
+  } catch (err) {
+    // Fallback silencioso
+  }
+
+  return null;
+}
+
+// Muestra en la barra lateral y en el mapa un barrio dividido por sus distintas sub-zonas internas según cómo cambia el alquiler
+function mentionNeighborhoodAndShowInternalSubzones(rawQuery) {
+  const box = document.getElementById("neighborhood-internal-subzones-box");
+  const input = document.getElementById("neighborhood-mention-input");
+  const q = (rawQuery || input?.value || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  if (!box) return;
+
+  if (!q || q === "todos" || q === "todas") {
+    appState.mentionedBarrioSlug = null;
+    box.style.display = "none";
+    box.innerHTML = "";
+    renderAffordabilityZonesOnMap();
+    if (leafletMap) leafletMap.setView([-34.5965, -58.4265], 13);
+    return;
+  }
+
+  let matchedSlug = null;
+  if (q.includes("almagro") || q.includes("boedo")) matchedSlug = "almagro";
+  else if (q.includes("caballito") || q.includes("centenario") || q.includes("goyena")) matchedSlug = "caballito";
+  else if (q.includes("palermo") || q.includes("soho") || q.includes("hollywood") || q.includes("botanico")) matchedSlug = "palermo";
+  else if (q.includes("belgrano") || q.includes("barrancas") || q.includes("coghlan")) matchedSlug = "belgrano";
+  else if (q.includes("crespo") || q.includes("villa crespo")) matchedSlug = "villa-crespo";
+  else if (q.includes("colegiales") || q.includes("lacroze")) matchedSlug = "colegiales";
+  else if (q.includes("recoleta") || q.includes("chico")) matchedSlug = "recoleta";
+
+  const matchedZones = matchedSlug
+    ? MAP_AFFORDABILITY_ZONES.filter(z => z.slug === matchedSlug || (matchedSlug === "palermo" && z.id.includes("palermo")))
+    : MAP_AFFORDABILITY_ZONES.filter(z => z.name.toLowerCase().includes(q));
+
+  if (matchedZones.length === 0) {
+    box.style.display = "flex";
+    box.innerHTML = `<div style="font-size:0.73rem; color:#fca5a5;">No encontramos ese barrio cargado. Probá con Almagro, Caballito, Palermo, Belgrano, Villa Crespo, Colegiales o Recoleta.</div>`;
+    return;
+  }
+
+  appState.mentionedBarrioSlug = matchedSlug || q;
+  renderAffordabilityZonesOnMap();
+
+  // Ajustar zoom del mapa para mostrar juntas todas las sub-zonas internas de ese barrio
+  if (leafletMap && matchedZones.length > 0) {
+    const allCoords = matchedZones.flatMap(z => z.coords);
+    leafletMap.fitBounds(allCoords, { padding: [35, 35], maxZoom: 14 });
+  }
+
+  box.style.display = "flex";
+  box.innerHTML = `
+    <div style="font-size:0.73rem; font-weight:800; color:#bae6fd; margin-bottom:0.15rem;">
+      📌 ${matchedZones.length} sub-zona${matchedZones.length === 1 ? "" : "s"} interna${matchedZones.length === 1 ? "" : "s"} según variación de alquiler:
+    </div>
+    ${matchedZones.map(z => {
+      const zm = computeZoneAffordabilityMetrics(z);
+      return `
+        <div style="background:var(--bg-primary); border-left:3.5px solid ${zm.rentHex}; padding:0.45rem 0.55rem; border-radius:4px; border:1px solid var(--card-border);">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:0.35rem;">
+            <strong style="color:#fff; font-size:0.76rem;">${escapeHtml(z.name.split(" (")[0])}</strong>
+            <span style="color:${zm.rentHex}; font-weight:800; font-size:0.74rem;">$${z.alquiler_ars.toLocaleString("es-AR")} (${zm.pctRent}%)</span>
+          </div>
+          <div style="font-size:0.69rem; color:var(--text-secondary); margin:0.2rem 0 0.35rem; line-height:1.3;">
+            ${escapeHtml(z.bridge_price_effect)}
+          </div>
+          <div style="display:flex; gap:0.35rem;">
+            <button type="button" class="btn-sm btn-secondary subzone-focus-map-btn" data-zone-id="${z.id}" style="font-size:0.66rem; padding:0.15rem 0.45rem;">🗺️ Enfocar en mapa</button>
+            <button type="button" class="btn-sm btn-primary subzone-open-detail-btn" data-zone-id="${z.id}" style="font-size:0.66rem; padding:0.15rem 0.45rem;">📊 Ver desglose</button>
+          </div>
+        </div>
+      `;
+    }).join("")}
+  `;
+
+  box.querySelectorAll(".subzone-focus-map-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const zId = btn.getAttribute("data-zone-id");
+      const found = MAP_AFFORDABILITY_ZONES.find(z => z.id === zId);
+      if (found && leafletMap) {
+        selectedZoneForDeepDive = found;
+        leafletMap.fitBounds(found.coords, { padding: [40, 40], maxZoom: 15 });
+      }
+    });
+  });
+
+  box.querySelectorAll(".subzone-open-detail-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const zId = btn.getAttribute("data-zone-id");
+      const found = MAP_AFFORDABILITY_ZONES.find(z => z.id === zId);
+      if (found) {
+        openZoneDetailedBreakdown(found);
+      }
+    });
+  });
+}
+
 function setupInteractiveMap() {
   selectedZoneForDeepDive = MAP_AFFORDABILITY_ZONES[0];
 
-  // Tabs: Mapa vs Filtro Común
+  // Tabs: Mapa vs Búsqueda Clásica
   const tabMapa = document.getElementById("tab-btn-mapa");
   const tabFiltros = document.getElementById("tab-btn-filtros");
   const contentMapa = document.getElementById("tab-content-mapa");
@@ -887,42 +1150,94 @@ function setupInteractiveMap() {
     }
   });
 
+  // Mencionar Barrio (Sub-zonas internas según cambia el alquiler)
+  const mentionBtn = document.getElementById("btn-mention-neighborhood");
+  const mentionInput = document.getElementById("neighborhood-mention-input");
+  mentionBtn?.addEventListener("click", () => mentionNeighborhoodAndShowInternalSubzones());
+  mentionInput?.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      mentionNeighborhoodAndShowInternalSubzones();
+    }
+  });
+  document.querySelectorAll(".barrio-quick-chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      const b = chip.getAttribute("data-barrio") || "todos";
+      if (mentionInput) mentionInput.value = b === "todos" ? "" : chip.textContent;
+      mentionNeighborhoodAndShowInternalSubzones(b);
+    });
+  });
+
   // Polygon Drawing Actions
   document.getElementById("btn-draw-freehand-polygon")?.addEventListener("click", startPolygonDrawing);
   document.getElementById("btn-clear-freehand-polygon")?.addEventListener("click", clearDrawnPolygon);
   document.getElementById("btn-finish-drawn-polygon")?.addEventListener("click", finishPolygonDrawing);
   document.getElementById("btn-cancel-drawn-polygon")?.addEventListener("click", cancelPolygonDrawing);
 
-  // Botón "+" para sumar múltiples Puntos de Interés
+  // Botón "+" para sumar múltiples Puntos de Interés (con nombre + dirección editable + re-indexado A, B, C...)
   const addPoiBtn = document.getElementById("btn-add-poi");
   const newPoiInput = document.getElementById("new-poi-name-input");
-  const handleAddPoi = () => {
+  const newPoiAddressInput = document.getElementById("new-poi-address-input");
+
+  const handleAddPoi = async () => {
     const rawName = (newPoiInput?.value || "").trim();
+    const rawAddr = (newPoiAddressInput?.value || "").trim();
+
     const nextIdx = appState.pois.length;
     const nextCode = String.fromCharCode(65 + (nextIdx % 26));
     const color = POI_PALETTE[nextIdx % POI_PALETTE.length];
-    const center = leafletMap ? leafletMap.getCenter() : { lat: -34.6015, lng: -58.4280 };
-    // Pequeño desplazamiento para que no se superponga exactamente si agrega varios seguidos
-    const jitterLat = ( (nextIdx % 5) - 2 ) * 0.0045;
-    const jitterLng = ( ((nextIdx * 2) % 5) - 2 ) * 0.0055;
+
+    let lat = -34.6015;
+    let lng = -58.4280;
+    let resolvedAddr = rawAddr || "Centro del mapa (arrastrable)";
+
+    if (rawAddr) {
+      const geo = await geocodeAddressInCaba(rawAddr);
+      if (geo) {
+        lat = geo.lat;
+        lng = geo.lng;
+        resolvedAddr = geo.formatted;
+      }
+    } else if (leafletMap) {
+      const center = leafletMap.getCenter();
+      const jitterLat = ((nextIdx % 5) - 2) * 0.0038;
+      const jitterLng = (((nextIdx * 2) % 5) - 2) * 0.0045;
+      lat = parseFloat((center.lat + jitterLat).toFixed(5));
+      lng = parseFloat((center.lng + jitterLng).toFixed(5));
+    }
 
     const newPoi = {
       id: "poi-" + Date.now() + "-" + nextIdx,
       code: nextCode,
       label: rawName || `Punto ${nextCode}`,
-      lat: parseFloat((center.lat + jitterLat).toFixed(5)),
-      lng: parseFloat((center.lng + jitterLng).toFixed(5)),
+      address: resolvedAddr,
+      lat,
+      lng,
       color
     };
     appState.pois.push(newPoi);
+    reindexPois();
+
     if (newPoiInput) newPoiInput.value = "";
+    if (newPoiAddressInput) newPoiAddressInput.value = "";
+
     renderPoisSidebarList();
     renderPoisOnLeafletMap();
     updateSortPoisSelectOptions();
+
+    if (rawAddr && leafletMap) {
+      leafletMap.panTo([lat, lng]);
+    }
   };
 
   addPoiBtn?.addEventListener("click", handleAddPoi);
   newPoiInput?.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAddPoi();
+    }
+  });
+  newPoiAddressInput?.addEventListener("keypress", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
       handleAddPoi();
@@ -949,6 +1264,7 @@ function setupInteractiveMap() {
     navigateTo("screen-metodo");
   });
 
+  reindexPois();
   renderPoisSidebarList();
   updateSortPoisSelectOptions();
   initLeafletRealMap();
@@ -1059,8 +1375,9 @@ function ensureMapReadyAndVisible() {
   });
 }
 
-// Renderiza la lista de Puntos de Interés en la barra lateral con soporte de Hover y Touch para iluminar rutas
+// Renderiza la lista de Puntos de Interés en la barra lateral con Nombre, Dirección Editable, Re-indexado Automático (A, B, C...) y Rutas
 function renderPoisSidebarList() {
+  reindexPois();
   const container = document.getElementById("pois-list-container");
   const badge = document.getElementById("pois-count-badge");
   if (badge) {
@@ -1069,23 +1386,31 @@ function renderPoisSidebarList() {
   if (!container) return;
 
   container.innerHTML = appState.pois.map(poi => `
-    <div class="poi-item-row ${appState.activeHighlightedPoiId === poi.id ? 'active-poi-route' : ''}" data-poi-id="${poi.id}">
-      <span style="background:${poi.color}; color:#fff; width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.72rem; flex-shrink:0;">
-        ${escapeHtml(poi.code)}
-      </span>
-      <input type="text" class="poi-name-input" data-poi-id="${poi.id}" value="${escapeHtml(poi.label)}"
-        style="background:transparent; border:none; color:#fff; font-size:0.78rem; font-weight:600; flex:1; min-width:0;" />
-      <button type="button" class="btn-sm btn-secondary poi-route-btn" data-poi-id="${poi.id}" title="Ver rutas en Auto, Subte, Colectivo y Caminando" style="font-size:0.66rem; padding:0.15rem 0.38rem;">
-        🛣️ Rutas
-      </button>
-      <button type="button" class="btn-sm btn-secondary poi-center-btn" data-poi-id="${poi.id}" title="Traer al centro del mapa" style="font-size:0.66rem; padding:0.15rem 0.35rem;">
-        📍
-      </button>
-      ${appState.pois.length > 1 ? `
-        <button type="button" class="btn-sm btn-secondary poi-delete-btn" data-poi-id="${poi.id}" title="Quitar punto" style="font-size:0.66rem; padding:0.15rem 0.35rem; color:#f87171;">
-          ✕
+    <div class="poi-item-row ${appState.activeHighlightedPoiId === poi.id ? 'active-poi-route' : ''}" data-poi-id="${poi.id}" style="flex-direction:column; align-items:stretch; gap:0.35rem; padding:0.45rem 0.55rem;">
+      <div style="display:flex; align-items:center; gap:0.4rem;">
+        <span style="background:${poi.color}; color:#fff; width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.72rem; flex-shrink:0;">
+          ${escapeHtml(poi.code)}
+        </span>
+        <input type="text" class="poi-name-input" data-poi-id="${poi.id}" value="${escapeHtml(poi.label)}"
+          placeholder="Nombre del punto"
+          style="background:transparent; border:none; color:#fff; font-size:0.78rem; font-weight:700; flex:1; min-width:0;" />
+        <button type="button" class="btn-sm btn-secondary poi-route-btn" data-poi-id="${poi.id}" title="Ver rutas en Auto, Subte, Colectivo y Caminando" style="font-size:0.65rem; padding:0.15rem 0.38rem;">
+          🛣️ Rutas
         </button>
-      ` : ""}
+        ${appState.pois.length > 1 ? `
+          <button type="button" class="btn-sm btn-secondary poi-delete-btn" data-poi-id="${poi.id}" title="Quitar punto (reordena letras A, B, C...)" style="font-size:0.65rem; padding:0.15rem 0.35rem; color:#f87171;">
+            ✕
+          </button>
+        ` : ""}
+      </div>
+      <div style="display:flex; align-items:center; gap:0.3rem;">
+        <input type="text" class="salary-input poi-address-input" data-poi-id="${poi.id}" value="${escapeHtml(poi.address || "")}"
+          placeholder="Escribí dirección o esquina (ej: Corrientes 3200)..."
+          style="flex:1; font-size:0.71rem; padding:0.22rem 0.45rem; background:rgba(15,23,42,0.75);" />
+        <button type="button" class="btn-sm btn-primary poi-locate-addr-btn" data-poi-id="${poi.id}" title="Ubicar esta dirección en el mapa" style="font-size:0.66rem; padding:0.2rem 0.45rem; flex-shrink:0;">
+          📍 Ir
+        </button>
+      </div>
     </div>
   `).join("");
 
@@ -1117,6 +1442,57 @@ function renderPoisSidebarList() {
     });
   });
 
+  // Editar dirección directamente en un punto existente y mover el pin al presionar Enter o tocar "📍 Ir"
+  const triggerGeocodeForPoi = async (pId, btnEl) => {
+    const found = appState.pois.find(p => p.id === pId);
+    const addrInp = container.querySelector(`.poi-address-input[data-poi-id="${pId}"]`);
+    if (!found || !addrInp) return;
+
+    const rawText = addrInp.value.trim();
+    if (!rawText) return;
+
+    const oldBtnText = btnEl ? btnEl.textContent : "📍 Ir";
+    if (btnEl) btnEl.textContent = "⏳";
+
+    const geo = await geocodeAddressInCaba(rawText);
+    if (btnEl) btnEl.textContent = oldBtnText;
+
+    if (geo) {
+      found.lat = geo.lat;
+      found.lng = geo.lng;
+      found.address = geo.formatted;
+      renderPoisOnLeafletMap();
+      if (leafletMap) leafletMap.panTo([found.lat, found.lng]);
+      highlightRoutesFromPoi(found);
+    } else {
+      alert("No pudimos ubicar esa calle/esquina. Probá indicando calle y altura o esquina (ej: Av. Corrientes 3200, Cabildo y Juramento, Parque Centenario).");
+    }
+  };
+
+  container.querySelectorAll(".poi-locate-addr-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const pId = btn.getAttribute("data-poi-id");
+      triggerGeocodeForPoi(pId, btn);
+    });
+  });
+
+  container.querySelectorAll(".poi-address-input").forEach(inp => {
+    inp.addEventListener("input", (e) => {
+      const pId = inp.getAttribute("data-poi-id");
+      const found = appState.pois.find(p => p.id === pId);
+      if (found) found.address = e.target.value;
+    });
+    inp.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const pId = inp.getAttribute("data-poi-id");
+        const btn = container.querySelector(`.poi-locate-addr-btn[data-poi-id="${pId}"]`);
+        triggerGeocodeForPoi(pId, btn);
+      }
+    });
+  });
+
   container.querySelectorAll(".poi-route-btn").forEach(btn => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1134,26 +1510,12 @@ function renderPoisSidebarList() {
     });
   });
 
-  container.querySelectorAll(".poi-center-btn").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const pId = btn.getAttribute("data-poi-id");
-      const found = appState.pois.find(p => p.id === pId);
-      if (found && leafletMap) {
-        const c = leafletMap.getCenter();
-        found.lat = parseFloat(c.lat.toFixed(5));
-        found.lng = parseFloat(c.lng.toFixed(5));
-        renderPoisOnLeafletMap();
-        highlightRoutesFromPoi(found);
-      }
-    });
-  });
-
   container.querySelectorAll(".poi-delete-btn").forEach(btn => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const pId = btn.getAttribute("data-poi-id");
       appState.pois = appState.pois.filter(p => p.id !== pId);
+      reindexPois();
       if (appState.activeHighlightedPoiId === pId) {
         appState.activeHighlightedPoiId = null;
         clearPoiRoutesHighlight();
@@ -1166,6 +1528,7 @@ function renderPoisSidebarList() {
 }
 
 function updateSortPoisSelectOptions() {
+  reindexPois();
   const optgroup = document.getElementById("sort-pois-optgroup");
   if (!optgroup) return;
 
@@ -1175,7 +1538,7 @@ function updateSortPoisSelectOptions() {
 
   optgroup.innerHTML = `
     <option value="cercania_todos" ${appState.sortOption === "cercania_todos" ? "selected" : ""}>
-      Cercanía promedio a tus ${appState.pois.length} puntos marcados
+      Cercanía promedio a tus ${appState.pois.length} puntos marcados (${appState.pois.map(p => p.code).join(", ")})
     </option>
     ${singleOptions}
     <option value="perm_orden_lista">Prioridad secuencial según orden de tu lista (${appState.pois.map(p => p.code).join(" > ")})</option>
@@ -1185,6 +1548,7 @@ function updateSortPoisSelectOptions() {
 // Renderiza los marcadores arrastrables de Puntos de Interés en el mapa Leaflet
 function renderPoisOnLeafletMap() {
   if (!leafletMap || !poisLayerGroup) return;
+  reindexPois();
   poisLayerGroup.clearLayers();
 
   appState.pois.forEach(poi => {
@@ -1249,6 +1613,8 @@ function renderPoisOnLeafletMap() {
       const newPos = e.target.getLatLng();
       poi.lat = parseFloat(newPos.lat.toFixed(5));
       poi.lng = parseFloat(newPos.lng.toFixed(5));
+      poi.address = `Ubicado en mapa (${poi.lat.toFixed(4)}, ${poi.lng.toFixed(4)})`;
+      renderPoisSidebarList();
       if (appState.activeHighlightedPoiId === poi.id) {
         highlightRoutesFromPoi(poi);
       }
@@ -1717,13 +2083,48 @@ function finishPolygonDrawing() {
   appState.drawnPolygonPoints = [...drawingPoints];
   drawingPoints = [];
   activePolygonLayer = true;
-  renderDrawnPolygonOnLeaflet();
 
-  openZoneDetailedBreakdown(buildCustomDrawnZoneObject());
+  const customZone = buildCustomDrawnZoneObject();
+  selectedZoneForDeepDive = customZone;
+
+  renderDrawnPolygonOnLeaflet();
+  renderDrawnPolygonSidebarSummary(customZone);
+}
+
+function renderDrawnPolygonSidebarSummary(customZone) {
+  const summaryBox = document.getElementById("drawn-polygon-map-summary");
+  if (!summaryBox) return;
+
+  if (!appState.drawnPolygonPoints || appState.drawnPolygonPoints.length < 3) {
+    summaryBox.style.display = "none";
+    summaryBox.innerHTML = "";
+    return;
+  }
+
+  const z = customZone || buildCustomDrawnZoneObject();
+  const m = computeZoneAffordabilityMetrics(z);
+  summaryBox.style.display = "block";
+  summaryBox.innerHTML = `
+    <div style="font-weight:800; color:#38bdf8; margin-bottom:0.2rem;">✓ Límite cerrado en el mapa (${appState.drawnPolygonPoints.length} esquinas)</div>
+    <div style="font-size:0.71rem; color:#cbd5e1; margin-bottom:0.35rem;">
+      Alquiler + Expensas: <strong style="color:${m.rentHex};">$${m.rentTotal.toLocaleString("es-AR")} (${m.pctRent}%)</strong> ·
+      Coste de vida: <strong style="color:${m.lifeHex};">$${m.lifestyleTotal.toLocaleString("es-AR")} (${m.pctLifestyle}%)</strong>
+    </div>
+    <button type="button" class="btn-sm btn-primary" id="btn-open-drawn-zone-detail" style="width:100%; font-size:0.72rem; padding:0.25rem 0.5rem;">
+      📊 Ver desglose completo de tu área →
+    </button>
+  `;
+
+  document.getElementById("btn-open-drawn-zone-detail")?.addEventListener("click", () => {
+    openZoneDetailedBreakdown(z);
+  });
 }
 
 function updateDrawnPolygonStyleAndHover() {
   renderDrawnPolygonOnLeaflet();
+  if (appState.drawnPolygonPoints && appState.drawnPolygonPoints.length >= 3) {
+    renderDrawnPolygonSidebarSummary();
+  }
 }
 
 function cancelPolygonDrawing() {
@@ -1739,6 +2140,7 @@ function clearDrawnPolygon() {
   activePolygonLayer = false;
   appState.drawnPolygonPoints = [];
   renderDrawnPolygonOnLeaflet();
+  renderDrawnPolygonSidebarSummary();
 }
 
 /* ----------------------------------------------------
@@ -2211,14 +2613,93 @@ function executeFilterAndRender() {
   }
 }
 
-// Construye los links reales con los filtros ya aplicados (Zona + Operación + Ambientes del Plano + Presupuesto) para cada portal que el usuario añadió
+// Lee y sincroniza todos los campos de la pestaña Búsqueda Clásica
+function readClassicFiltersFromDOM() {
+  const cf = appState.classicFilters || {};
+  const getVal = (id, fallback) => {
+    const el = document.getElementById(id);
+    return el ? el.value : fallback;
+  };
+  cf.operation = getVal("filter-operation", appState.selectedOperation || "alquiler");
+  cf.currency = getVal("filter-currency", "ARS");
+  cf.minPrice = parseInt(getVal("filter-min-price", "0"), 10) || 0;
+  cf.maxPrice = parseInt(getVal("filter-max-price", String(appState.maxPrice || 1500000)), 10) || 1500000;
+  cf.maxExpensas = parseInt(getVal("filter-max-expensas", "250000"), 10) || 250000;
+  cf.propertyType = getVal("filter-property-type", "departamento");
+  cf.disposition = getVal("filter-disposition", "frente");
+  cf.orientation = getVal("filter-orientation", "norte");
+  cf.antiquity = getVal("filter-antiquity", "hasta_10");
+  cf.minRooms = parseInt(getVal("filter-min-rooms", "2"), 10) || 2;
+  cf.bedrooms = getVal("filter-bedrooms", "1");
+  cf.bathrooms = getVal("filter-bathrooms", "1");
+  cf.minM2Covered = parseInt(getVal("filter-min-m2-covered", "42"), 10) || 42;
+  cf.maxM2Total = parseInt(getVal("filter-max-m2-total", "95"), 10) || 95;
+  cf.garage = getVal("filter-garage", "no");
+
+  cf.features = Array.from(document.querySelectorAll(".classic-feature-cb:checked")).map(cb => cb.value);
+  cf.amenities = Array.from(document.querySelectorAll(".classic-amenity-cb:checked")).map(cb => cb.value);
+  cf.requirements = Array.from(document.querySelectorAll(".classic-req-cb:checked")).map(cb => cb.value);
+
+  appState.classicFilters = cf;
+  appState.selectedOperation = cf.operation === "venta" ? "venta" : "alquiler";
+  appState.maxPrice = cf.maxPrice;
+  return cf;
+}
+
+function resetClassicFiltersForm() {
+  const setVal = (id, v) => {
+    const el = document.getElementById(id);
+    if (el) el.value = v;
+  };
+  setVal("filter-operation", "alquiler");
+  setVal("filter-currency", "ARS");
+  setVal("filter-min-price", "0");
+  setVal("filter-max-price", "1500000");
+  setVal("filter-max-expensas", "250000");
+  setVal("filter-property-type", "departamento");
+  setVal("filter-disposition", "frente");
+  setVal("filter-orientation", "norte");
+  setVal("filter-antiquity", "hasta_10");
+  setVal("filter-min-rooms", "2");
+  setVal("filter-bedrooms", "1");
+  setVal("filter-bathrooms", "1");
+  setVal("filter-min-m2-covered", "42");
+  setVal("filter-max-m2-total", "95");
+  setVal("filter-garage", "no");
+
+  document.querySelectorAll(".classic-feature-cb").forEach(cb => {
+    cb.checked = ["balcon", "cocina_separada", "lavadero"].includes(cb.value);
+  });
+  document.querySelectorAll(".classic-amenity-cb").forEach(cb => {
+    cb.checked = ["sum", "seguridad"].includes(cb.value);
+  });
+  document.querySelectorAll(".classic-req-cb").forEach(cb => {
+    cb.checked = ["caucion", "bajas_expensas"].includes(cb.value);
+  });
+  readClassicFiltersFromDOM();
+}
+
+// Construye los links reales con los filtros ya aplicados (Zona + Operación + Ambientes + Tipo de Inmueble + Presupuesto) para cada portal que el usuario añadió
 function buildFilteredPortalUrl(portalDomain, zoneNameOrSlug) {
+  const cf = readClassicFiltersFromDOM();
   const d = (portalDomain || "").toLowerCase();
   const op = appState.selectedOperation === "venta" ? "venta" : "alquiler";
   const maxP = appState.maxPrice || 1500000;
 
-  const mainRooms = appState.floorRooms.filter(r => r.type === "living" || r.type === "habitacion").length;
+  const mainRooms = appState.activeTab === "filtros"
+    ? cf.minRooms
+    : (appState.floorRooms.filter(r => r.type === "living" || r.type === "habitacion").length || cf.minRooms || 2);
   const ambCount = Math.max(1, Math.min(5, mainRooms || 2));
+
+  const propTypeMap = {
+    departamento: "departamentos",
+    ph: "ph",
+    casa: "casas",
+    duplex: "departamentos",
+    piso: "departamentos",
+    loft: "departamentos"
+  };
+  const propPlural = propTypeMap[cf.propertyType] || "departamentos";
 
   let slug = (zoneNameOrSlug || "palermo").toLowerCase();
   if (slug.includes("almagro")) slug = "almagro";
@@ -2231,36 +2712,57 @@ function buildFilteredPortalUrl(portalDomain, zoneNameOrSlug) {
   else slug = "capital-federal";
 
   if (d.includes("zonaprop")) {
-    return `https://www.zonaprop.com.ar/departamentos-${op}-${slug}-${ambCount}-ambientes-menos-${maxP}-pesos.html`;
+    return `https://www.zonaprop.com.ar/${propPlural}-${op}-${slug}-${ambCount}-ambientes-menos-${maxP}-pesos.html`;
   }
   if (d.includes("argenprop")) {
-    return `https://www.argenprop.com/departamentos/${op}/${slug}/${ambCount}-ambientes-hasta-${maxP}-pesos`;
+    return `https://www.argenprop.com/${propPlural}/${op}/${slug}/${ambCount}-ambientes-hasta-${maxP}-pesos`;
   }
   if (d.includes("mercadolibre")) {
-    return `https://inmuebles.mercadolibre.com.ar/departamentos/${op}/capital-federal/${slug}/_${ambCount}-ambientes`;
+    return `https://inmuebles.mercadolibre.com.ar/${propPlural}/${op}/capital-federal/${slug}/_${ambCount}-ambientes`;
   }
   if (d.includes("remax")) {
     return `https://www.remax.com.ar/listings/${op === 'venta' ? 'buy' : 'rent'}?address=${encodeURIComponent(slug)}&rooms=${ambCount}`;
   }
   if (d.includes("properati")) {
-    return `https://www.properati.com.ar/s/${slug}/departamento/${op}`;
+    return `https://www.properati.com.ar/s/${slug}/${propPlural === 'casas' ? 'casa' : 'departamento'}/${op}`;
   }
   const cleanHost = portalDomain.startsWith("http") ? portalDomain : `https://${portalDomain}`;
-  return `${cleanHost}/?zona=${encodeURIComponent(slug)}&operacion=${op}&ambientes=${ambCount}&max_precio=${maxP}`;
+  return `${cleanHost}/?zona=${encodeURIComponent(slug)}&tipo=${propPlural}&operacion=${op}&ambientes=${ambCount}&banos=${cf.bathrooms}&m2_min=${cf.minM2Covered}&max_precio=${maxP}`;
 }
 
 function renderFocusedZoneDeepDive(zone) {
   const container = document.getElementById("focused-zone-deep-dive");
   if (!container || !zone) return;
 
+  const cf = readClassicFiltersFromDOM();
   const m = computeZoneAffordabilityMetrics(zone);
   const imp = zone.impuestos_y_servicios || MAP_AFFORDABILITY_ZONES[0].impuestos_y_servicios;
   const locales = zone.locales_cercanos || MAP_AFFORDABILITY_ZONES[0].locales_cercanos;
   const distInfo = getZoneDistanceMetricsToPois(zone);
 
-  const mainRooms = Math.max(1, appState.floorRooms.filter(r => r.type === "living" || r.type === "habitacion").length || 2);
+  const mainRooms = appState.activeTab === "filtros"
+    ? cf.minRooms
+    : Math.max(1, appState.floorRooms.filter(r => r.type === "living" || r.type === "habitacion").length || 2);
   const priorityRooms = appState.floorRooms.filter(r => r.priority).map(r => r.name).join(", ") || "Living, Cocina, Baño, Habitación";
-  const opLabel = appState.selectedOperation === "venta" ? "Compra-Venta" : "Alquiler";
+  const opLabel = appState.selectedOperation === "venta" ? "Compra-Venta" : (cf.operation === "temporal" ? "Alquiler Temporal" : "Alquiler Tradicional");
+  const propTypeLabels = {
+    departamento: "Depto en edificio",
+    ph: "PH (Propiedad Horizontal)",
+    casa: "Casa",
+    duplex: "Dúplex / Tríplex",
+    piso: "Piso / Semipiso",
+    loft: "Loft / Divisible"
+  };
+  const propLabel = propTypeLabels[cf.propertyType] || "Departamento";
+  const classicSummaryTags = [
+    `${propLabel}`,
+    `${mainRooms} amb (${cf.bathrooms} baño/s)`,
+    `Mín. ${cf.minM2Covered} m² cub.`,
+    cf.garage !== "no" ? `Cochera: ${cf.garage}` : "Sin cochera",
+    ...(cf.features || []).slice(0, 3),
+    ...(cf.amenities || []).slice(0, 2),
+    ...(cf.requirements || []).slice(0, 2)
+  ].join(" · ");
 
   // Vivienda Genuina Total = Alquiler + Expensas + Impuestos Municipales y Servicios Domiciliarios Fijos
   const viviendaGenuinaArs = m.rentTotal + zone.servicios_ars;
@@ -2310,7 +2812,7 @@ function renderFocusedZoneDeepDive(zone) {
           <div style="font-size:0.74rem; color:var(--text-secondary); line-height:1.45;">
             • <strong>Sub-zona:</strong> ${escapeHtml(zone.name)}<br>
             • <strong>Operación:</strong> ${opLabel} | <strong>Tope:</strong> $${(appState.maxPrice || 1500000).toLocaleString("es-AR")} ARS<br>
-            • <strong>Layout buscado:</strong> ${mainRooms} ambientes (${escapeHtml(priorityRooms)})
+            • <strong>Filtros / Layout:</strong> ${escapeHtml(classicSummaryTags)} (${escapeHtml(priorityRooms)})
           </div>
         </div>
         <a href="${escapeHtml(filteredUrl)}" target="_blank" rel="noopener noreferrer" class="btn-portal-link" style="justify-content:center; width:100%;">
