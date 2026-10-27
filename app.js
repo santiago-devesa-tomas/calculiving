@@ -4,19 +4,15 @@
  * 25/75 draggable & resizable floor planner, and default vertical list results.
  */
 
-// Global State
+// Global State (Empieza 100% limpio cada vez que el usuario entra a la página)
 const appState = {
   currentScreen: "screen-home",
   screenHistory: ["screen-home"],
-  salary: 1500000, // ARS
-  portals: [
-    { id: "p-1", name: "Zonaprop", domain: "zonaprop.com.ar", status: "ok" },
-    { id: "p-2", name: "Argenprop", domain: "argenprop.com", status: "ok" },
-    { id: "p-3", name: "MercadoLibre Inmuebles", domain: "mercadolibre.com.ar/inmuebles", status: "ok" }
-  ],
+  salary: 0, // Sin sueldo precargado: el usuario ingresa el suyo de cero
+  portals: [], // Sin sitios precargados: se agregan de cero
   properties: [],
   selectedOperation: "alquiler",
-  maxPrice: 1600000,
+  maxPrice: 0,
   minRooms: 1,
   activeFloor: 1,
   floorsCount: 1,
@@ -25,15 +21,10 @@ const appState = {
     { id: "room-1", type: "living", name: "Living", floor: 1, x: 50, y: 50, width: 5.5, length: 4.0, priority: true },
     { id: "room-2", type: "cocina", name: "Cocina", floor: 1, x: 340, y: 50, width: 3.2, length: 2.8, priority: true },
     { id: "room-3", type: "baño", name: "Baño", floor: 1, x: 340, y: 220, width: 2.2, length: 1.8, priority: true },
-    { id: "room-4", type: "habitacion", name: "Habitación", floor: 1, x: 50, y: 270, width: 3.8, length: 3.2, priority: true },
-    { id: "room-5", type: "cochera", name: "Cochera", floor: 1, x: 520, y: 50, width: 5.0, length: 2.5, priority: false }
+    { id: "room-4", type: "habitacion", name: "Habitación", floor: 1, x: 50, y: 270, width: 3.8, length: 3.2, priority: true }
   ],
   selectedRoomId: "room-1",
-  pois: [
-    { id: "poi-1", code: "A", label: "Punto A", address: "Av. Córdoba 2100 (Facultad / Centro)", lat: -34.5992, lng: -58.3975, color: "#ef4444" },
-    { id: "poi-2", code: "B", label: "Punto B", address: "Av. Santa Fe 3200 (Alto Palermo)", lat: -34.5880, lng: -58.4100, color: "#3b82f6" },
-    { id: "poi-3", code: "C", label: "Punto C", address: "Av. Santa Fe y Juan B. Justo (Pacífico)", lat: -34.5775, lng: -58.4265, color: "#10b981" }
-  ],
+  pois: [], // Sin puntos de interés precargados: el usuario suma los suyos (A, B, C...)
   activeHighlightedPoiId: null,
   mentionedBarrioSlug: null,
   drawnPolygonPoints: [],
@@ -44,23 +35,117 @@ const appState = {
     operation: "alquiler",
     currency: "ARS",
     minPrice: 0,
-    maxPrice: 950000,
-    maxExpensas: 180000,
+    maxPrice: 0,
+    maxExpensas: 0,
     propertyType: "departamento",
     disposition: "indistinto",
     orientation: "indistinto",
     antiquity: "indistinto",
-    minRooms: 2,
-    bedrooms: 1,
+    minRooms: 1,
+    bedrooms: 0,
     bathrooms: 1,
-    minM2Covered: 42,
-    maxM2Total: 120,
+    minM2Covered: 0,
+    maxM2Total: 0,
     garage: "indistinto",
-    features: ["Balcón corrido / aterrazado", "Cocina separada (no integrada)"],
+    features: [],
     amenities: [],
-    requirements: ["Apto mascotas", "Acepta seguro de caución"]
+    requirements: []
   }
 };
+
+// Borra cualquier búsqueda anterior, sueldo, puntos de interés, portales o polígonos para empezar de cero
+function resetEntireSessionState() {
+  try {
+    localStorage.clear();
+    sessionStorage.clear();
+  } catch (e) {}
+
+  appState.salary = 0;
+  appState.maxPrice = 0;
+  appState.selectedOperation = "alquiler";
+  appState.portals = [];
+  appState.pois = [];
+  appState.activeHighlightedPoiId = null;
+  appState.mentionedBarrioSlug = null;
+  appState.drawnPolygonPoints = [];
+  appState.isDrawingMode = false;
+  appState.floorsCount = 1;
+  appState.activeFloor = 1;
+  appState.floorRooms = [
+    { id: "room-1", type: "living", name: "Living", floor: 1, x: 50, y: 50, width: 5.5, length: 4.0, priority: true },
+    { id: "room-2", type: "cocina", name: "Cocina", floor: 1, x: 340, y: 50, width: 3.2, length: 2.8, priority: true },
+    { id: "room-3", type: "baño", name: "Baño", floor: 1, x: 340, y: 220, width: 2.2, length: 1.8, priority: true },
+    { id: "room-4", type: "habitacion", name: "Habitación", floor: 1, x: 50, y: 270, width: 3.8, length: 3.2, priority: true }
+  ];
+  appState.selectedRoomId = "room-1";
+
+  // Limpiar inputs del DOM para que el navegador no recuerde valores viejos
+  const emptyInputs = [
+    "global-salary-input",
+    "map-filter-max-price",
+    "neighborhood-mention-input",
+    "new-poi-name-input",
+    "new-poi-address-input",
+    "portal-site-input",
+    "fullscreen-bot-input"
+  ];
+  emptyInputs.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+
+  const mapOp = document.getElementById("map-filter-operation");
+  if (mapOp) mapOp.value = "alquiler";
+
+  const hoverToggle = document.getElementById("hover-auto-navigate-toggle");
+  if (hoverToggle) hoverToggle.checked = false;
+
+  const subzonesBox = document.getElementById("neighborhood-internal-subzones-box");
+  if (subzonesBox) {
+    subzonesBox.style.display = "none";
+    subzonesBox.innerHTML = "";
+  }
+
+  // Limpiar conversación del bot dejando solo el saludo inicial
+  const chatThread = document.getElementById("fullscreen-chat-thread");
+  if (chatThread) {
+    chatThread.innerHTML = `
+      <div class="chat-msg bot">
+        <div class="avatar">🤖</div>
+        <div class="chat-bubble-content">
+          ¡Hola! Estoy acá para ayudarte a encontrar tu lugar ideal en cualquier punto de Buenos Aires. 
+          Contame: <strong>¿qué estás buscando?</strong> (por ejemplo: si necesitás espacio para teletrabajo, balcón, cocina separada, cercanía a alguna línea de transporte o un presupuesto máximo mensual).
+        </div>
+      </div>
+    `;
+  }
+
+  if (typeof resetClassicFiltersForm === "function") {
+    resetClassicFiltersForm();
+  }
+  if (typeof clearDrawnPolygon === "function") {
+    clearDrawnPolygon();
+  }
+  if (typeof clearPoiRoutesHighlight === "function") {
+    clearPoiRoutesHighlight();
+  }
+  if (typeof renderConnectedPortalsList === "function") {
+    renderConnectedPortalsList();
+  }
+  if (typeof renderPoisSidebarList === "function") {
+    renderPoisSidebarList();
+  }
+  if (typeof renderPoisOnLeafletMap === "function") {
+    renderPoisOnLeafletMap();
+  }
+  if (typeof renderAffordabilityZonesOnMap === "function") {
+    renderAffordabilityZonesOnMap();
+  }
+  if (typeof renderFloorButtons === "function" && typeof renderRoomsOnCanvas === "function") {
+    renderFloorButtons();
+    renderRoomsOnCanvas();
+  }
+}
 
 document.addEventListener("DOMContentLoaded", async () => {
   await loadPropertiesData();
@@ -71,7 +156,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupInteractiveMap();
   setupFloorPlanCanvasEditor();
   setupResultsListing();
-  renderConnectedPortalsList();
+  resetEntireSessionState();
+});
+
+// Si el navegador restaura la página desde la caché al volver o recargar, limpiar todo igual
+window.addEventListener("pageshow", () => {
+  if (appState.currentScreen === "screen-home") {
+    resetEntireSessionState();
+  }
 });
 
 /* ----------------------------------------------------
@@ -111,7 +203,9 @@ function navigateBack() {
 
   updateHeaderStepIndicator(prevScreen);
 
-  if (prevScreen === "screen-metodo") {
+  if (prevScreen === "screen-home") {
+    resetEntireSessionState();
+  } else if (prevScreen === "screen-metodo") {
     ensureMapReadyAndVisible();
   }
 }
@@ -128,12 +222,14 @@ function updateHeaderStepIndicator(screenId) {
 
     if (screenId === "screen-bot-fullscreen") {
       if (badge) badge.textContent = "Asistente Guiado (Opción A)";
-    } else if (screenId === "screen-portales") {
-      if (badge) badge.textContent = "Cargar Sitios de Búsqueda";
-    } else if (screenId === "screen-metodo") {
-      if (badge) badge.textContent = "Dónde Buscar (Delimitar Límites)";
+    } else if (screenId === "screen-busqueda-clasica") {
+      if (badge) badge.textContent = "Buscar Personalmente · Búsqueda Clásica (Opción B)";
     } else if (screenId === "screen-editor") {
-      if (badge) badge.textContent = "Editor de Plano (Opción C)";
+      if (badge) badge.textContent = "Armar tu Lugar Deseado (Opción C)";
+    } else if (screenId === "screen-portales") {
+      if (badge) badge.textContent = "Dónde Buscar · Cargar Sitios Web";
+    } else if (screenId === "screen-metodo") {
+      if (badge) badge.textContent = "Dónde Buscar · Delimitar en el Mapa";
     } else if (screenId === "screen-resultados") {
       if (badge) badge.textContent = "Resultados";
     }
@@ -142,20 +238,60 @@ function updateHeaderStepIndicator(screenId) {
 
 function setupNavigationFlow() {
   document.getElementById("nav-brand-btn")?.addEventListener("click", () => {
+    resetEntireSessionState();
     appState.screenHistory = ["screen-home"];
-    navigateTo("screen-home");
+    document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+    document.getElementById("screen-home")?.classList.add("active");
+    appState.currentScreen = "screen-home";
+    updateHeaderStepIndicator("screen-home");
+  });
+
+  document.getElementById("header-reset-all-btn")?.addEventListener("click", () => {
+    resetEntireSessionState();
+    appState.screenHistory = ["screen-home"];
+    document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+    document.getElementById("screen-home")?.classList.add("active");
+    appState.currentScreen = "screen-home";
+    updateHeaderStepIndicator("screen-home");
   });
 
   document.getElementById("header-back-btn")?.addEventListener("click", navigateBack);
 
-  // Home 3 Options
-  document.getElementById("btn-option-a")?.addEventListener("click", () => navigateTo("screen-bot-fullscreen"));
-  document.getElementById("btn-option-b")?.addEventListener("click", () => navigateTo("screen-portales"));
-  document.getElementById("btn-option-c")?.addEventListener("click", () => navigateTo("screen-editor"));
+  // Home 3 Options (Tipo de Búsqueda)
+  document.getElementById("btn-option-a")?.addEventListener("click", () => {
+    appState.activeTab = "bot";
+    navigateTo("screen-bot-fullscreen");
+  });
+  document.getElementById("btn-option-b")?.addEventListener("click", () => {
+    appState.activeTab = "filtros";
+    navigateTo("screen-busqueda-clasica");
+  });
+  document.getElementById("btn-option-c")?.addEventListener("click", () => {
+    appState.activeTab = "plano";
+    navigateTo("screen-editor");
+  });
 
-  // Flow forward buttons
+  // Flow forward & back buttons
   document.getElementById("bot-proceed-portales-btn")?.addEventListener("click", () => navigateTo("screen-portales"));
   document.getElementById("bot-back-home-btn")?.addEventListener("click", navigateBack);
+
+  document.getElementById("btn-classic-back-home")?.addEventListener("click", navigateBack);
+  document.getElementById("btn-classic-proceed-portales")?.addEventListener("click", () => {
+    const cf = readClassicFiltersFromDOM();
+    const mapOp = document.getElementById("map-filter-operation");
+    const mapMax = document.getElementById("map-filter-max-price");
+    if (mapOp) mapOp.value = cf.operation === "venta" ? "venta" : "alquiler";
+    if (mapMax && cf.maxPrice > 0) mapMax.value = String(cf.maxPrice);
+    navigateTo("screen-portales");
+  });
+  document.getElementById("btn-reset-classic-filters")?.addEventListener("click", () => {
+    resetClassicFiltersForm();
+  });
+
+  document.getElementById("btn-editor-search-results")?.addEventListener("click", () => {
+    navigateTo("screen-portales");
+  });
+
   document.getElementById("portales-back-btn")?.addEventListener("click", navigateBack);
   document.getElementById("portals-ready-btn")?.addEventListener("click", () => navigateTo("screen-metodo"));
   document.getElementById("btn-map-go-results")?.addEventListener("click", () => {
@@ -163,22 +299,6 @@ function setupNavigationFlow() {
     const mapMax = parseFloat(document.getElementById("map-filter-max-price")?.value);
     if (mapOp) appState.selectedOperation = mapOp;
     if (!isNaN(mapMax) && mapMax > 0) appState.maxPrice = mapMax;
-    executeFilterAndRender();
-    navigateTo("screen-resultados");
-  });
-  document.getElementById("btn-filter-go-results")?.addEventListener("click", () => {
-    readClassicFiltersFromDOM();
-    executeFilterAndRender();
-    navigateTo("screen-resultados");
-  });
-  document.getElementById("btn-switch-to-map-from-filters")?.addEventListener("click", () => {
-    readClassicFiltersFromDOM();
-    document.getElementById("tab-btn-mapa")?.click();
-  });
-  document.getElementById("btn-reset-classic-filters")?.addEventListener("click", () => {
-    resetClassicFiltersForm();
-  });
-  document.getElementById("btn-editor-search-results")?.addEventListener("click", () => {
     executeFilterAndRender();
     navigateTo("screen-resultados");
   });
@@ -193,16 +313,18 @@ function setupSalaryBanner() {
   const explainBtn = document.getElementById("open-cost-bot-btn");
 
   const updateSalary = () => {
-    const val = parseFloat(salaryInput.value);
-    if (!isNaN(val) && val > 0) {
-      appState.salary = val;
-      renderAffordabilityZonesOnMap();
-      if (activePolygonLayer && appState.drawnPolygonPoints.length >= 3) {
-        updateDrawnPolygonStyleAndHover();
-      }
-      if (appState.currentScreen === "screen-resultados") {
-        executeFilterAndRender();
-      }
+    const raw = (salaryInput?.value || "").trim();
+    const val = parseFloat(raw);
+    appState.salary = (!isNaN(val) && val > 0) ? val : 0;
+    renderAffordabilityZonesOnMap();
+    if (appState.mentionedBarrioSlug) {
+      mentionNeighborhoodAndShowInternalSubzones(appState.mentionedBarrioSlug);
+    }
+    if (activePolygonLayer && appState.drawnPolygonPoints.length >= 3) {
+      updateDrawnPolygonStyleAndHover();
+    }
+    if (appState.currentScreen === "screen-resultados") {
+      executeFilterAndRender();
     }
   };
 
@@ -901,6 +1023,399 @@ const MAP_AFFORDABILITY_ZONES = [
       { tipo: "🏋️ Club Belgrano Athletic y Gimnasios de Barrio", valores: "Cuota mensual: $36.000", mensual_ars: 26000 }
     ],
     gastos_alrededor_detalle: "Estación Belgrano R (Tren Mitre), cercanía a Subte B (De los Incas) y Subte D (Juramento por Crámer). Calles residenciales arboladas."
+  },
+  // --- RESTO DE CAPITAL FEDERAL (CABA) ---
+  {
+    id: "zona-villa-urquiza-saavedra",
+    slug: "villa-urquiza",
+    region: "caba",
+    name: "Villa Urquiza / Saavedra / Coghlan Norte (Av. Triunvirato / Congreso a Gral. Paz)",
+    urban_boundary_note: "Delimitado por Av. Congreso, Av. Triunvirato, Av. Olazábal, Av. Crisólogo Larralde, Parque Sarmiento y Av. Gral. Paz.",
+    bridge_price_effect: "Sobre el eje del Subte B (Rosas / Echeverría) y DoHo el alquiler es un ~15% más alto que hacia Saavedra / Parque Sarmiento cruzando Av. Crisólogo Larralde.",
+    coords: [
+      [-34.5445, -58.4895],
+      [-34.5525, -58.4685],
+      [-34.5685, -58.4765],
+      [-34.5815, -58.4825],
+      [-34.5765, -58.5015],
+      [-34.5575, -58.5045]
+    ],
+    alquiler_ars: 610000,
+    expensas_ars: 118000,
+    servicios_ars: 60000,
+    canasta_comercios_ars: 255000,
+    transporte_ars: 35000,
+    impuestos_y_servicios: { abl_municipal_ars: 15000, luz_edenor_edesur_ars: 16500, gas_metrogas_ars: 9500, agua_aysa_ars: 8500, internet_fibra_ars: 10500 },
+    locales_cercanos: [
+      { tipo: "🛒 Supermercados y Mayoristas (Av. Triunvirato / Av. Álvarez Thomas)", valores: "Leche 1L: $1.420 | Fideos 500g: $1.150 | Yerba 1kg: $3.650", mensual_ars: 94000 },
+      { tipo: "🥩 Carnicerías y Pollerías (Av. Monroe / Olazábal)", valores: "Asado 1kg: $9.400 | Suprema 1kg: $6.400 | Maple huevos: $4.400", mensual_ars: 62000 },
+      { tipo: "🥬 Verdulerías y Ferias (Plaza Echeverría / Parque Saavedra)", valores: "Papa 1kg: $1.000 | Tomate 1kg: $1.950 | Bolsón verdura: $8.800", mensual_ars: 35000 },
+      { tipo: "🥖 Panaderías y Cafés (Corredor DoHo / Holmberg)", valores: "Pan 1kg: $2.750 | Café + medialunas: $4.200", mensual_ars: 25000 },
+      { tipo: "🧺 Farmacias y Lavaderos de Barrio", valores: "Valet ropa: $5.200 | Limpieza hogar: $14.000", mensual_ars: 18000 },
+      { tipo: "🏋️ Gimnasios y Polideportivo Parque Sarmiento", valores: "Cuota mensual: $29.000", mensual_ars: 21000 }
+    ],
+    gastos_alrededor_detalle: "Cabecera Subte B (Juan Manuel de Rosas), Tren Mitre (Est. Urquiza y Saavedra) y salida rápida a Gral. Paz / Panamericana."
+  },
+  {
+    id: "zona-nunez",
+    slug: "nunez",
+    region: "caba",
+    name: "Núñez / Bajo Núñez (Av. Cabildo / Libertador a Gral. Paz)",
+    urban_boundary_note: "Delimitado por Av. Congreso, Av. Cabildo, Av. del Libertador, Av. Gral. Paz y Costanera Norte / Ciudad Universitaria.",
+    bridge_price_effect: "Entre Av. Cabildo y las vías del Tren Mitre predominan edificios modernos, mientras que del lado de Av. del Libertador (Bajo Núñez / Lomas de Núñez) el alquiler sube ~18%.",
+    coords: [
+      [-34.5355, -58.4665],
+      [-34.5415, -58.4495],
+      [-34.5525, -58.4505],
+      [-34.5565, -58.4685],
+      [-34.5445, -58.4785]
+    ],
+    alquiler_ars: 760000,
+    expensas_ars: 155000,
+    servicios_ars: 74000,
+    canasta_comercios_ars: 305000,
+    transporte_ars: 38000,
+    impuestos_y_servicios: { abl_municipal_ars: 20500, luz_edenor_edesur_ars: 19500, gas_metrogas_ars: 11000, agua_aysa_ars: 11000, internet_fibra_ars: 12000 },
+    locales_cercanos: [
+      { tipo: "🛒 Supermercados y Proveedurías (Av. Cabildo 3500-4800 / Crisólogo Larralde)", valores: "Leche 1L: $1.520 | Queso cremoso 1kg: $8.900 | Yerba 1kg: $3.850", mensual_ars: 112000 },
+      { tipo: "🥩 Carnicerías y Granjas (Manuela Pedraza / Juara)", valores: "Asado/Vacío 1kg: $10.600 | Suprema 1kg: $7.100", mensual_ars: 72000 },
+      { tipo: "🥬 Verdulerías y Almacenes Naturales (O'Higgins / Arcos)", valores: "Tomate 1kg: $2.300 | Fruta estación 1kg: $2.200", mensual_ars: 42000 },
+      { tipo: "🥖 Panaderías y Cafeterías de Especialidad (Bajo Núñez)", valores: "Pan masa madre: $3.500 | Café + pastelería: $6.800", mensual_ars: 33000 },
+      { tipo: "🧺 Tintorerías y Farmacias", valores: "Valet ropa: $6.500 | Higiene y limpieza: $18.000", mensual_ars: 21000 },
+      { tipo: "🏋️ Clubes Deportivos y Gimnasios sobre Libertador", valores: "Cuota mensual: $41.000", mensual_ars: 25000 }
+    ],
+    gastos_alrededor_detalle: "Subte D (Congreso de Tucumán), Metrobus Norte, Estación Núñez / Rivadavia (Tren Mitre) y cercanía a Ciudad Universitaria."
+  },
+  {
+    id: "zona-devoto-villa-del-parque",
+    slug: "villa-devoto",
+    region: "caba",
+    name: "Villa Devoto / Villa del Parque / Paternal (Plaza Arenales / Av. Beiró / Cuenca)",
+    urban_boundary_note: "Delimitado por Av. San Martín, Av. Francisco Beiró, Av. Nazca, Av. Segurola y Av. Gral. Paz.",
+    bridge_price_effect: "Alrededor de Plaza Arenales (Devoto Centro) el polo gastronómico eleva los alquileres, mientras que cruzando las vías del Tren San Martín hacia Villa del Parque o Monte Castro bajan un ~17%.",
+    coords: [
+      [-34.5885, -58.5015],
+      [-34.5895, -58.4745],
+      [-34.6095, -58.4715],
+      [-34.6185, -58.4985],
+      [-34.6055, -58.5225]
+    ],
+    alquiler_ars: 560000,
+    expensas_ars: 98000,
+    servicios_ars: 56000,
+    canasta_comercios_ars: 242000,
+    transporte_ars: 35000,
+    impuestos_y_servicios: { abl_municipal_ars: 13500, luz_edenor_edesur_ars: 15500, gas_metrogas_ars: 9000, agua_aysa_ars: 8000, internet_fibra_ars: 10000 },
+    locales_cercanos: [
+      { tipo: "🛒 Supermercados y Centros Comerciales (Calle Cuenca / Av. Beiró)", valores: "Leche 1L: $1.390 | Fideos 500g: $1.100 | Yerba 1kg: $3.550", mensual_ars: 89000 },
+      { tipo: "🥩 Carnicerías y Frigoríficos (Av. Nazca / Lope de Vega)", valores: "Asado 1kg: $8.900 | Suprema 1kg: $6.100 | Maple huevos: $4.200", mensual_ars: 58000 },
+      { tipo: "🥬 Verdulerías y Ferias Barriales", valores: "Papa 1kg: $920 | Tomate 1kg: $1.800 | Fruta 1kg: $1.750", mensual_ars: 34000 },
+      { tipo: "🥖 Panaderías Tradicionales y Cafés (Plaza Arenales / Cuenca)", valores: "Pan 1kg: $2.550 | Facturas docena: $5.800", mensual_ars: 24000 },
+      { tipo: "🧺 Farmacias y Lavaderos", valores: "Valet ropa: $4.800 | Limpieza mensual: $12.500", mensual_ars: 17000 },
+      { tipo: "🏋️ Clubes de Barrio (Racing de Villa del Parque / Kimberley)", valores: "Cuota social/gimnasio: $26.000", mensual_ars: 20000 }
+    ],
+    gastos_alrededor_detalle: "Tren San Martín (Est. Devoto y Villa del Parque a Palermo en 14 min), Tren Urquiza y rápido acceso a Gral. Paz."
+  },
+  {
+    id: "zona-flores-floresta-liniers",
+    slug: "flores",
+    region: "caba",
+    name: "Flores / Floresta / Liniers / Mataderos (Eje Av. Rivadavia / Subte A vs Sur Autopista)",
+    urban_boundary_note: "Corredor Oeste de CABA a lo largo de Av. Rivadavia, Av. Avellaneda, Av. Gaona, Av. Juan B. Alberdi y Av. Emilio Castro.",
+    bridge_price_effect: "Entre Av. Rivadavia y Av. Gaona (Flores Norte / Subte A) hay edificios con expensas moderadas; cruzando Autopista Perito Moreno / Av. Eva Perón hacia el sur los precios bajan un ~22%.",
+    coords: [
+      [-34.6185, -58.4985],
+      [-34.6195, -58.4525],
+      [-34.6425, -58.4545],
+      [-34.6585, -58.5085],
+      [-34.6395, -58.5285]
+    ],
+    alquiler_ars: 465000,
+    expensas_ars: 82000,
+    servicios_ars: 49000,
+    canasta_comercios_ars: 215000,
+    transporte_ars: 34000,
+    impuestos_y_servicios: { abl_municipal_ars: 10500, luz_edenor_edesur_ars: 14000, gas_metrogas_ars: 8000, agua_aysa_ars: 7000, internet_fibra_ars: 9500 },
+    locales_cercanos: [
+      { tipo: "🛒 Mayoristas y Supermercados (Av. Rivadavia / Av. Juan B. Alberdi)", valores: "Leche 1L: $1.320 | Aceite 1.5L: $2.500 | Yerba 1kg: $3.350", mensual_ars: 79000 },
+      { tipo: "🥩 Frigoríficos y Carnicerías (Polo Mataderos / Emilio Castro)", valores: "Asado/Vacío 1kg: $8.100 | Milanesa 1kg: $6.400 | Maple huevos: $3.900", mensual_ars: 52000 },
+      { tipo: "🥬 Mercados y Verdulerías (Liniers / Av. Avellaneda)", valores: "Papa 1kg: $800 | Cebolla 1kg: $900 | Fruta estación 1kg: $1.500", mensual_ars: 29000 },
+      { tipo: "🥖 Panaderías y Casas de Pastas de Barrio", valores: "Pan 1kg: $2.200 | Ravioles x2 cajas: $4.200", mensual_ars: 21000 },
+      { tipo: "🧺 Artículos de Limpieza Sueltos e Indumentaria (Polo Avellaneda)", valores: "Limpieza mensual: $9.800 | Valet ropa: $4.200", mensual_ars: 16000 },
+      { tipo: "🏋️ Gimnasios y Clubes Barriales", valores: "Cuota mensual: $22.000", mensual_ars: 18000 }
+    ],
+    gastos_alrededor_detalle: "Subte A (Carabobo / San José de Flores / San Pedrito), Tren Sarmiento (Flores, Floresta, Villa Luro, Liniers) y centro comercial mayorista."
+  },
+  {
+    id: "zona-centro-san-telmo-barracas",
+    slug: "san-telmo",
+    region: "caba",
+    name: "Centro / Monserrat / San Telmo / Parque Patricios / Barracas (Eje Subtes A, C, E y H)",
+    urban_boundary_note: "Corredor Este y Sur de CABA: Av. Córdoba, Av. 9 de Julio, Av. Paseo Colón, Casco Histórico San Telmo, Av. Caseros y Av. Montes de Oca.",
+    bridge_price_effect: "Sobre Boulevard Caseros y San Telmo subió la demanda gastronómica, mientras que en Monserrat, Constitución Oeste y Parque Patricios (Distrito Tecnológico) los alquileres son un ~18% más bajos con conexión a todas las líneas de Subte.",
+    coords: [
+      [-34.5985, -58.3915],
+      [-34.5965, -58.3665],
+      [-34.6385, -58.3625],
+      [-34.6485, -58.3985],
+      [-34.6295, -58.4145]
+    ],
+    alquiler_ars: 495000,
+    expensas_ars: 95000,
+    servicios_ars: 51000,
+    canasta_comercios_ars: 228000,
+    transporte_ars: 32000,
+    impuestos_y_servicios: { abl_municipal_ars: 11500, luz_edenor_edesur_ars: 14500, gas_metrogas_ars: 8000, agua_aysa_ars: 7500, internet_fibra_ars: 9500 },
+    locales_cercanos: [
+      { tipo: "🛒 Supermercados y Autoservicios (Av. Independencia / Av. Entre Ríos / Montes de Oca)", valores: "Leche 1L: $1.360 | Fideos 500g: $1.100 | Yerba 1kg: $3.450", mensual_ars: 84000 },
+      { tipo: "🥩 Mercado de San Telmo y Carnicerías de Barrio (Av. Caseros)", valores: "Asado 1kg: $8.600 | Suprema 1kg: $6.000 | Maple huevos: $4.100", mensual_ars: 55000 },
+      { tipo: "🥬 Verdulerías y Ferias de Abastecimiento", valores: "Papa 1kg: $880 | Tomate 1kg: $1.750 | Fruta 1kg: $1.650", mensual_ars: 31000 },
+      { tipo: "🥖 Panaderías y Menús Ejecutivos de Mediodía", valores: "Pan 1kg: $2.400 | Menú del día: $6.800", mensual_ars: 23000 },
+      { tipo: "🧺 Farmacias y Lavaderos", valores: "Valet ropa: $4.600 | Limpieza mensual: $11.500", mensual_ars: 17000 },
+      { tipo: "🏋️ Gimnasios y Clubes Históricos", valores: "Cuota mensual: $24.000", mensual_ars: 18000 }
+    ],
+    gastos_alrededor_detalle: "Nodo central de Subtes A, B, C, D, E y H + Metrobus 9 de Julio y Bajo. Mínimo gasto de tiempo y transporte hacia oficinas y facultades."
+  },
+
+  // --- GRAN BUENOS AIRES: ZONA NORTE ---
+  {
+    id: "zona-gba-norte-vicente-lopez-este",
+    slug: "vicente-lopez",
+    region: "zona-norte",
+    name: "Vicente López Este: Olivos / La Lucila / Florida Este (Av. Maipú al Río)",
+    urban_boundary_note: "Partido de Vicente López entre Av. Gral. Paz, Calle Paraná, Av. Mitre / Av. Maipú, Av. del Libertador y Paseo de la Costa (Río de la Plata).",
+    bridge_price_effect: "Entre Av. Maipú y el Río (Tren Mitre ramal Tigre y Paseo de la Costa) los alquileres son un ~25% más altos que cruzando Av. Mitre y Panamericana hacia Florida Oeste y Munro.",
+    coords: [
+      [-34.4885, -58.4795],
+      [-34.5025, -58.4685],
+      [-34.5345, -58.4655],
+      [-34.5395, -58.4885],
+      [-34.5065, -58.4965]
+    ],
+    alquiler_ars: 680000,
+    expensas_ars: 130000,
+    servicios_ars: 66000,
+    canasta_comercios_ars: 278000,
+    transporte_ars: 38000,
+    impuestos_y_servicios: { abl_municipal_ars: 18000, luz_edenor_edesur_ars: 18000, gas_metrogas_ars: 10000, agua_aysa_ars: 9000, internet_fibra_ars: 11000 },
+    locales_cercanos: [
+      { tipo: "🛒 Supermercados y Centros Comerciales (Av. Maipú / Ugarte / Rawson)", valores: "Leche 1L: $1.480 | Queso cremoso 1kg: $8.800 | Yerba 1kg: $3.750", mensual_ars: 101000 },
+      { tipo: "🥩 Carnicerías y Granjas (Olivos / Florida)", valores: "Asado 1kg: $9.900 | Suprema 1kg: $6.700 | Maple huevos: $4.500", mensual_ars: 66000 },
+      { tipo: "🥬 Verdulerías y Almacenes (Calle Córdoba / Paraná)", valores: "Papa 1kg: $1.050 | Tomate 1kg: $2.100 | Fruta 1kg: $2.000", mensual_ars: 38000 },
+      { tipo: "🥖 Panaderías y Cafeterías (Estación Olivos / La Lucila)", valores: "Pan 1kg: $2.950 | Café + medialunas: $4.500", mensual_ars: 28000 },
+      { tipo: "🧺 Farmacias y Lavaderos", valores: "Valet ropa: $5.600 | Limpieza mensual: $15.000", mensual_ars: 20000 },
+      { tipo: "🏋️ Gimnasios y Deportes en el Vial Costero", valores: "Cuota mensual: $34.000", mensual_ars: 25000 }
+    ],
+    gastos_alrededor_detalle: "Metrobus Norte por Av. Maipú (conecta directo con Puente Saavedra y Subte D), Tren Mitre (Ramales Tigre y Bartolomé Mitre) y Tren de la Costa."
+  },
+  {
+    id: "zona-gba-norte-vicente-lopez-oeste-san-martin",
+    slug: "san-martin",
+    region: "zona-norte",
+    name: "Florida Oeste / Munro / Villa Martelli / Gral. San Martín / Villa Ballester (Cruzando Panamericana)",
+    urban_boundary_note: "Corredor Noroeste cruzando Autopista Panamericana: Munro, Florida Oeste, Villa Martelli, San Martín Centro, San Andrés y Villa Ballester.",
+    bridge_price_effect: "Cruzando Autopista Panamericana hacia el oeste (Munro, Florida Oeste y San Martín / Villa Ballester) el alquiler de 2 y 3 ambientes baja entre un 24% y 32% con comercios y ferias mucho más económicos.",
+    coords: [
+      [-34.5065, -58.4965],
+      [-34.5395, -58.4885],
+      [-34.5765, -58.5045],
+      [-34.5815, -58.5625],
+      [-34.5255, -58.5685]
+    ],
+    alquiler_ars: 470000,
+    expensas_ars: 72000,
+    servicios_ars: 52000,
+    canasta_comercios_ars: 220000,
+    transporte_ars: 36000,
+    impuestos_y_servicios: { abl_municipal_ars: 11500, luz_edenor_edesur_ars: 14500, gas_metrogas_ars: 8500, agua_aysa_ars: 7500, internet_fibra_ars: 10000 },
+    locales_cercanos: [
+      { tipo: "🛒 Supermercados y Mayoristas (Av. Vélez Sársfield / Peatonal Belgrano San Martín)", valores: "Leche 1L: $1.340 | Fideos 500g: $1.080 | Yerba 1kg: $3.400", mensual_ars: 81000 },
+      { tipo: "🥩 Carnicerías y Frigoríficos (Munro / Villa Ballester)", valores: "Asado 1kg: $8.300 | Suprema 1kg: $5.900 | Maple huevos: $4.000", mensual_ars: 54000 },
+      { tipo: "🥬 Verdulerías y Ferias Municipales", valores: "Papa 1kg: $820 | Tomate 1kg: $1.650 | Fruta estación 1kg: $1.550", mensual_ars: 30000 },
+      { tipo: "🥖 Panaderías y Confiterías (Alvear Ballester / Mitre Munro)", valores: "Pan 1kg: $2.300 | Facturas docena: $5.200", mensual_ars: 21000 },
+      { tipo: "🧺 Outlets e Indumentaria (Centro Comercial Munro) y Limpieza", valores: "Limpieza suelta mensual: $10.500 | Valet ropa: $4.400", mensual_ars: 16000 },
+      { tipo: "🏋️ Gimnasios y Clubes Deportivos", valores: "Cuota mensual: $22.000", mensual_ars: 18000 }
+    ],
+    gastos_alrededor_detalle: "Tren Belgrano Norte (Munro / Florida Oeste a Retiro), Tren Mitre Ramal Suárez (San Martín, San Andrés, Malaver, Villa Ballester) y UNSAM."
+  },
+  {
+    id: "zona-gba-norte-san-isidro-tigre-pilar",
+    slug: "san-isidro",
+    region: "zona-norte",
+    name: "San Isidro / Martínez / Tigre / San Fernando / Pilar (Corredor Norte)",
+    urban_boundary_note: "Partidos de San Isidro, San Fernando, Tigre y corredor Panamericana hacia Pacheco y Pilar.",
+    bridge_price_effect: "En San Isidro Centro / Acassuso / Martínez hacia el río predominan valores altos, pero en San Fernando, Tigre Centro (cerca de estación Mitre/Río) o hacia Boulogne y Pilar Centro los alquileres bajan un ~22% con más metraje y verde.",
+    coords: [
+      [-34.4155, -58.5925],
+      [-34.4325, -58.5325],
+      [-34.4885, -58.4795],
+      [-34.5065, -58.5355],
+      [-34.4625, -58.6125]
+    ],
+    alquiler_ars: 590000,
+    expensas_ars: 105000,
+    servicios_ars: 61000,
+    canasta_comercios_ars: 258000,
+    transporte_ars: 41000,
+    impuestos_y_servicios: { abl_municipal_ars: 16000, luz_edenor_edesur_ars: 17000, gas_metrogas_ars: 9500, agua_aysa_ars: 8500, internet_fibra_ars: 10000 },
+    locales_cercanos: [
+      { tipo: "🛒 Hipermercados y Centros Comerciales (Av. Centenario / Av. Cazón Tigre)", valores: "Leche 1L: $1.420 | Queso tybo 1kg: $8.600 | Yerba 1kg: $3.600", mensual_ars: 95000 },
+      { tipo: "🥩 Carnicerías y Granjas (Martínez / San Fernando / Tigre)", valores: "Asado 1kg: $9.200 | Suprema 1kg: $6.300 | Maple huevos: $4.300", mensual_ars: 62000 },
+      { tipo: "🥬 Puerto de Frutos / Mercados y Verdulerías Zonal", valores: "Papa 1kg: $950 | Tomate 1kg: $1.900 | Fruta estación 1kg: $1.800", mensual_ars: 35000 },
+      { tipo: "🥖 Panaderías y Cafés (Casco Histórico San Isidro / Paseo Victorica)", valores: "Pan 1kg: $2.700 | Merienda: $5.800", mensual_ars: 25000 },
+      { tipo: "🧺 Farmacias y Servicios Barriales", valores: "Valet ropa: $5.100 | Limpieza hogar: $13.500", mensual_ars: 19000 },
+      { tipo: "🏋️ Clubes Náuticos, Remo y Gimnasios", valores: "Cuota mensual: $30.000", mensual_ars: 22000 }
+    ],
+    gastos_alrededor_detalle: "Tren Mitre (Acassuso, San Isidro, Victoria, Virreyes, San Fernando, Carupá, Tigre), Tren de la Costa y Autopista Panamericana (Ramales Tigre y Pilar)."
+  },
+
+  // --- GRAN BUENOS AIRES: ZONA OESTE ---
+  {
+    id: "zona-gba-oeste-ramos-haedo-caseros",
+    slug: "ramos-mejia",
+    region: "zona-oeste",
+    name: "Ramos Mejía / Haedo / Caseros / Ciudad Jardín (La Matanza Norte y Tres de Febrero)",
+    urban_boundary_note: "Cruzando Av. Gral. Paz al Oeste: Ramos Mejía Norte y Sur (Av. de Mayo / Av. Rivadavia), Haedo, Caseros y Ciudad Jardín El Palomar.",
+    bridge_price_effect: "Ramos Mejía Centro (Av. de Mayo) tiene el mayor polo comercial y gastronómico del primer cordón oeste; cruzando hacia Haedo Chico, Villa Luzuriaga o Caseros (Tren San Martín) el alquiler baja entre un 15% y 22%.",
+    coords: [
+      [-34.5885, -58.5925],
+      [-34.5885, -58.5185],
+      [-34.6555, -58.5225],
+      [-34.6685, -58.5985]
+    ],
+    alquiler_ars: 460000,
+    expensas_ars: 68000,
+    servicios_ars: 50000,
+    canasta_comercios_ars: 218000,
+    transporte_ars: 36000,
+    impuestos_y_servicios: { abl_municipal_ars: 11000, luz_edenor_edesur_ars: 14000, gas_metrogas_ars: 8000, agua_aysa_ars: 7500, internet_fibra_ars: 9500 },
+    locales_cercanos: [
+      { tipo: "🛒 Supermercados y Mayoristas (Av. Rivadavia / Av. de Mayo / Av. San Martín Caseros)", valores: "Leche 1L: $1.330 | Fideos 500g: $1.050 | Yerba 1kg: $3.350", mensual_ars: 80000 },
+      { tipo: "🥩 Carnicerías y Frigoríficos del Oeste", valores: "Asado 1kg: $8.200 | Suprema 1kg: $5.800 | Maple huevos: $3.950", mensual_ars: 53000 },
+      { tipo: "🥬 Verdulerías y Ferias Barriales", valores: "Papa 1kg: $800 | Tomate 1kg: $1.600 | Fruta estación 1kg: $1.500", mensual_ars: 29000 },
+      { tipo: "🥖 Panaderías y Polo Gastronómico (Ramos / Plaza Plate Ciudad Jardín)", valores: "Pan 1kg: $2.250 | Café + medialunas: $3.900", mensual_ars: 21000 },
+      { tipo: "🧺 Farmacias, Limpieza Suelta y Lavaderos", valores: "Valet ropa: $4.200 | Limpieza mensual: $10.000", mensual_ars: 16000 },
+      { tipo: "🏋️ Gimnasios y Clubes (Estudiantes / AFALP / Estudiantil Porteño)", valores: "Cuota mensual: $23.000", mensual_ars: 19000 }
+    ],
+    gastos_alrededor_detalle: "Tren Sarmiento (Ramos Mejía y Haedo a Once en 22 min), Tren San Martín (Caseros / El Palomar a Palermo), Autopista Acceso Oeste y cercanía a UNLaM y UNTREF."
+  },
+  {
+    id: "zona-gba-oeste-moron-castelar-ituzaingo",
+    slug: "moron",
+    region: "zona-oeste",
+    name: "Morón / Castelar / Ituzaingó / Hurlingham / Merlo / Moreno (Corredor Sarmiento y Acceso Oeste)",
+    urban_boundary_note: "Partidos de Morón, Hurlingham, Ituzaingó, Merlo y Moreno a lo largo del Ferrocarril Sarmiento y Autopista del Oeste.",
+    bridge_price_effect: "Castelar Norte y Parque Leloir manejan valores residenciales más altos; en Morón Sur, Ituzaingó, Hurlingham, Padua, Merlo y Moreno los alquileres de PHs y casas con patio o departamentos bajan entre un 20% y 35%.",
+    coords: [
+      [-34.5855, -58.7455],
+      [-34.5855, -58.5955],
+      [-34.6855, -58.5985],
+      [-34.6855, -58.7455]
+    ],
+    alquiler_ars: 410000,
+    expensas_ars: 55000,
+    servicios_ars: 46000,
+    canasta_comercios_ars: 202000,
+    transporte_ars: 38000,
+    impuestos_y_servicios: { abl_municipal_ars: 9500, luz_edenor_edesur_ars: 13500, gas_metrogas_ars: 7500, agua_aysa_ars: 6500, internet_fibra_ars: 9000 },
+    locales_cercanos: [
+      { tipo: "🛒 Hipermercados y Mayoristas (Av. Vergara / Av. Rivadavia Morón / Castelar)", valores: "Leche 1L: $1.280 | Aceite 1.5L: $2.400 | Yerba 1kg: $3.250", mensual_ars: 74000 },
+      { tipo: "🥩 Frigoríficos y Carnicerías (Morón / Castelar / Ituzaingó)", valores: "Asado 1kg: $7.800 | Suprema 1kg: $5.500 | Maple huevos: $3.800", mensual_ars: 49000 },
+      { tipo: "🥬 Verdulerías y Quintas Directas del Oeste", valores: "Bolsón verdura 7kg: $7.200 | Papa 1kg: $750 | Tomate 1kg: $1.450", mensual_ars: 26000 },
+      { tipo: "🥖 Panaderías y Cafeterías (Calle Arias Castelar / Centro Morón)", valores: "Pan 1kg: $2.100 | Facturas docena: $4.800", mensual_ars: 19000 },
+      { tipo: "🧺 Limpieza Suelta, Farmacias y Servicios", valores: "Limpieza mensual: $9.200 | Valet ropa: $3.900", mensual_ars: 16000 },
+      { tipo: "🏋️ Gimnasios y Polideportivos (Gorki Grana / Club Morón)", valores: "Cuota mensual: $20.000", mensual_ars: 18000 }
+    ],
+    gastos_alrededor_detalle: "Tren Sarmiento (Morón, Castelar, Ituzaingó, San Antonio de Padua, Merlo, Moreno), Tren San Martín / Urquiza (Hurlingham) y Acceso Oeste."
+  },
+
+  // --- GRAN BUENOS AIRES: ZONA SUR Y LA PLATA ---
+  {
+    id: "zona-gba-sur-avellaneda-lanus",
+    slug: "lanus",
+    region: "zona-sur",
+    name: "Avellaneda / Wilde / Lanús Este y Oeste / Remedios de Escalada (Primer Cordón Sur)",
+    urban_boundary_note: "Cruzando el Riachuelo (Puente Pueyrredón): Av. Mitre (Avellaneda, Sarandí, Wilde) y Av. Hipólito Yrigoyen / Pavón (Lanús Oeste, Lanús Este, Escalada).",
+    bridge_price_effect: "A 10 minutos de CABA por Puente Pueyrredón o Tren Roca (1 parada desde Constitución a Avellaneda y 2 a Lanús): Lanúsita (Del Valle Iberlucea) tiene edificios nuevos, mientras que en Lanús Este, Escalada, Piñeyro y Wilde el alquiler baja un ~22%.",
+    coords: [
+      [-34.6525, -58.4285],
+      [-34.6485, -58.3185],
+      [-34.7385, -58.3225],
+      [-34.7385, -58.4355]
+    ],
+    alquiler_ars: 430000,
+    expensas_ars: 64000,
+    servicios_ars: 47000,
+    canasta_comercios_ars: 208000,
+    transporte_ars: 34000,
+    impuestos_y_servicios: { abl_municipal_ars: 10000, luz_edenor_edesur_ars: 13500, gas_metrogas_ars: 7500, agua_aysa_ars: 7000, internet_fibra_ars: 9000 },
+    locales_cercanos: [
+      { tipo: "🛒 Mayoristas y Supermercados (Av. Mitre Avellaneda / 9 de Julio Lanús Este)", valores: "Leche 1L: $1.290 | Fideos 500g: $1.020 | Yerba 1kg: $3.300", mensual_ars: 76000 },
+      { tipo: "🥩 Frigoríficos y Carnicerías (Lanús / Gerli / Wilde)", valores: "Asado 1kg: $7.900 | Suprema 1kg: $5.600 | Maple huevos: $3.850", mensual_ars: 51000 },
+      { tipo: "🥬 Verdulerías y Ferias Francas", valores: "Papa 1kg: $780 | Tomate 1kg: $1.500 | Fruta estación 1kg: $1.450", mensual_ars: 27000 },
+      { tipo: "🥖 Panaderías y Polo Gastronómico Lanúsita", valores: "Pan 1kg: $2.150 | Café + medialunas: $3.800", mensual_ars: 20000 },
+      { tipo: "🧺 Limpieza Suelta, Farmacias y Lavaderos", valores: "Limpieza mensual: $9.500 | Valet ropa: $4.000", mensual_ars: 16000 },
+      { tipo: "🏋️ Club Atlético Lanús, Racing, Independiente y Gimnasios", valores: "Cuota mensual: $21.000", mensual_ars: 18000 }
+    ],
+    gastos_alrededor_detalle: "Tren Roca eléctrico a Constitución en 7 a 14 min (Darío Santillán y Maximiliano Kosteki, Gerli, Lanús, Remedios de Escalada, Sarandí, Wilde), UNDAV y UNLa."
+  },
+  {
+    id: "zona-gba-sur-lomas-banfield-quilmes-adrogue",
+    slug: "lomas-de-zamora",
+    region: "zona-sur",
+    name: "Lomas de Zamora / Banfield / Temperley / Adrogué / Quilmes / Bernal (Corredor Roca Sur)",
+    urban_boundary_note: "Partidos de Lomas de Zamora, Almirante Brown (Adrogué / Burzaco), Esteban Echeverría (Monte Grande) y Quilmes / Bernal / Berazategui.",
+    bridge_price_effect: "Las Lomitas, Banfield Este, Adrogué Centro y Quilmes Centro/Chico concentran edificios de categoría; cruzando hacia Banfield Oeste, Temperley, Turdera, Bernal Oeste o Ezpeleta los alquileres bajan entre un 20% y 30%.",
+    coords: [
+      [-34.7025, -58.4485],
+      [-34.6955, -58.2325],
+      [-34.8255, -58.2225],
+      [-34.8285, -58.4585]
+    ],
+    alquiler_ars: 445000,
+    expensas_ars: 69000,
+    servicios_ars: 48000,
+    canasta_comercios_ars: 212000,
+    transporte_ars: 37000,
+    impuestos_y_servicios: { abl_municipal_ars: 10500, luz_edenor_edesur_ars: 14000, gas_metrogas_ars: 7500, agua_aysa_ars: 7000, internet_fibra_ars: 9000 },
+    locales_cercanos: [
+      { tipo: "🛒 Centros Comerciales (Peatonal Laprida Lomas / Rivadavia Quilmes / Maipú Banfield)", valores: "Leche 1L: $1.310 | Queso cremoso 1kg: $7.900 | Yerba 1kg: $3.350", mensual_ars: 78000 },
+      { tipo: "🥩 Carnicerías y Granjas (Banfield / Temperley / Bernal)", valores: "Asado 1kg: $8.100 | Suprema 1kg: $5.700 | Maple huevos: $3.900", mensual_ars: 52000 },
+      { tipo: "🥬 Verdulerías y Productores del Cinturón Hortícola Sur", valores: "Bolsón verdura 7kg: $7.000 | Papa 1kg: $750 | Tomate 1kg: $1.450", mensual_ars: 27000 },
+      { tipo: "🥖 Panaderías y Cafeterías (Las Lomitas / Plaza Brown Adrogué / Bernal)", valores: "Pan 1kg: $2.200 | Merienda: $4.900", mensual_ars: 21000 },
+      { tipo: "🧺 Farmacias y Artículos de Limpieza", valores: "Limpieza mensual: $9.400 | Valet ropa: $4.100", mensual_ars: 16000 },
+      { tipo: "🏋️ Clubes (Banfield, Lomas Athletic, Quilmes) y Gimnasios", valores: "Cuota mensual: $22.000", mensual_ars: 18000 }
+    ],
+    gastos_alrededor_detalle: "Tren Roca Ramales Ezeiza / Alejandro Korn (Banfield, Lomas, Temperley, Adrogué, Monte Grande) y Ramal La Plata / Bosques (Don Bosco, Bernal, Quilmes, Berazategui). Cercanía a UNLZ y UNQ."
+  },
+  {
+    id: "zona-la-plata-pba",
+    slug: "la-plata",
+    region: "la-plata",
+    name: "La Plata: Casco Urbano Universitario vs City Bell / Gonnet / Tolosa",
+    urban_boundary_note: "Capital de la Provincia de Buenos Aires: Casco Urbano (Av. 1 a 31 y de 32 a 72, Plaza Moreno / Plaza Paso / Facultades UNLP) y corredor Norte (Tolosa, Gonnet, City Bell, Villa Elisa).",
+    bridge_price_effect: "En el eje de Plaza Moreno / Calle 8 y 12 y zona de Facultades (Bosque / 1 y 47) se concentra la demanda de departamentos; hacia Tolosa, Ringuelet o el sur de Av. 60 el alquiler baja un ~20%, mientras que en City Bell y Gonnet predominan casas con parque.",
+    coords: [
+      [-34.8625, -58.0755],
+      [-34.8755, -57.9325],
+      [-34.9585, -57.9055],
+      [-34.9625, -58.0255]
+    ],
+    alquiler_ars: 395000,
+    expensas_ars: 58000,
+    servicios_ars: 45000,
+    canasta_comercios_ars: 198000,
+    transporte_ars: 35000,
+    impuestos_y_servicios: { abl_municipal_ars: 9000, luz_edenor_edesur_ars: 13500, gas_metrogas_ars: 7500, agua_aysa_ars: 6500, internet_fibra_ars: 8500 },
+    locales_cercanos: [
+      { tipo: "🛒 Supermercados y Centros Comerciales (Calle 8, Calle 12 y Cantilo City Bell)", valores: "Leche 1L: $1.260 | Fideos 500g: $1.000 | Yerba 1kg: $3.200", mensual_ars: 72000 },
+      { tipo: "🥩 Carnicerías y Pollerías Platenses", valores: "Asado 1kg: $7.700 | Suprema 1kg: $5.400 | Maple huevos: $3.700", mensual_ars: 48000 },
+      { tipo: "🥬 Quintas del Cordón Hortícola Platense (Verdura directa de quinta)", valores: "Bolsón verdura 8kg: $6.200 | Tomate platense 1kg: $1.300 | Lechuga: $900", mensual_ars: 24000 },
+      { tipo: "🥖 Panaderías, Comedores Universitarios y Cafés (Diagonal 74 / Plaza Paso)", valores: "Pan 1kg: $2.050 | Menú estudiantil/ejecutivo: $5.500", mensual_ars: 21000 },
+      { tipo: "🧺 Lavaderos de Ropa y Farmacias", valores: "Valet ropa: $3.800 | Limpieza mensual: $9.000", mensual_ars: 16000 },
+      { tipo: "🏋️ Gimnasios y Clubes (Estudiantes, Gimnasia, Universitario)", valores: "Cuota mensual: $19.000", mensual_ars: 17000 }
+    ],
+    gastos_alrededor_detalle: "Universidad Nacional de La Plata (UNLP), Tren Roca eléctrico a Constitución, Autopista Buenos Aires - La Plata y diagonales con transporte directo."
   }
 ];
 
@@ -926,39 +1441,63 @@ function reindexPois() {
   });
 }
 
-// Geocodificador de direcciones, avenidas con altura y esquinas de CABA (instantáneo local + fallback a OpenStreetMap Nominatim)
+// Geocodificador de direcciones, avenidas con altura, esquinas y localidades de TODA CABA y PROVINCIA DE BUENOS AIRES
 async function geocodeAddressInCaba(rawAddress) {
   const text = (rawAddress || "").trim();
   if (!text) return null;
   const lower = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-  // 1. Puntos de referencia, esquinas famosas y estaciones
+  // 1. Puntos de referencia, esquinas famosas, estaciones y centros urbanos de CABA y Provincia de Buenos Aires
   const landmarks = [
-    { keys: ["obelisco", "9 de julio y corrientes", "corrientes y 9 de julio"], lat: -34.6037, lng: -58.3816, formatted: "Obelisco (Av. 9 de Julio y Av. Corrientes)" },
-    { keys: ["cabildo y juramento", "juramento y cabildo"], lat: -34.5622, lng: -58.4565, formatted: "Av. Cabildo y Av. Juramento (Belgrano)" },
-    { keys: ["acoyte y rivadavia", "rivadavia y acoyte", "primera junta"], lat: -34.6182, lng: -58.4368, formatted: "Av. Rivadavia y Av. Acoyte (Caballito)" },
-    { keys: ["corrientes y medrano", "medrano y corrientes"], lat: -34.6036, lng: -58.4208, formatted: "Av. Corrientes y Av. Medrano (Almagro)" },
-    { keys: ["cordoba y medrano", "medrano y cordoba"], lat: -34.5988, lng: -58.4205, formatted: "Av. Córdoba y Av. Medrano (Almagro Norte)" },
-    { keys: ["corrientes y scalabrini", "scalabrini ortiz y corrientes", "malabia"], lat: -34.5982, lng: -58.4392, formatted: "Av. Corrientes y Av. Scalabrini Ortiz (Villa Crespo)" },
-    { keys: ["santa fe y juan b justo", "puente pacifico", "pacifico", "palermo"], lat: -34.5782, lng: -58.4258, formatted: "Av. Santa Fe y Av. Juan B. Justo (Puente Pacífico)" },
-    { keys: ["plaza italia", "santa fe y sarmiento", "rural"], lat: -34.5815, lng: -58.4208, formatted: "Plaza Italia (Palermo)" },
-    { keys: ["plaza serrano", "cortazar", "serrano y honduras"], lat: -34.5885, lng: -58.4305, formatted: "Plaza Serrano / Honduras (Palermo Soho)" },
-    { keys: ["parque centenario", "diaz velez", "angel gallardo"], lat: -34.6065, lng: -58.4355, formatted: "Parque Centenario (Caballito / Almagro)" },
-    { keys: ["parque rivadavia"], lat: -34.6175, lng: -58.4342, formatted: "Parque Rivadavia (Caballito)" },
-    { keys: ["pedro goyena", "goyena"], lat: -34.6242, lng: -58.4395, formatted: "Av. Pedro Goyena 800 (Caballito Sur)" },
-    { keys: ["retiro", "estacion retiro", "libertador 100"], lat: -34.5912, lng: -58.3745, formatted: "Estación Retiro" },
-    { keys: ["constitucion", "estacion constitucion"], lat: -34.6275, lng: -58.3812, formatted: "Estación Constitución" },
-    { keys: ["once", "plaza miserere", "pueyrredon y rivadavia"], lat: -34.6098, lng: -58.4062, formatted: "Plaza Miserere / Once (Av. Rivadavia y Av. Pueyrredón)" },
-    { keys: ["congreso", "callao y rivadavia"], lat: -34.6092, lng: -58.3922, formatted: "Congreso (Av. Callao y Av. Rivadavia)" },
-    { keys: ["ciudad universitaria", "fadu", "exactas", "nuñez"], lat: -34.5425, lng: -58.4415, formatted: "Ciudad Universitaria (UBA)" },
-    { keys: ["facultad de medicina", "fmed", "economicas", "cordoba 2100", "plaza houssay"], lat: -34.5992, lng: -58.3978, formatted: "Plaza Houssay / Av. Córdoba 2100" },
-    { keys: ["ingenieria", "fiuba", "paseo colon 850", "las heras 2200"], lat: -34.5885, lng: -58.3965, formatted: "Av. Las Heras 2200 (Recoleta)" },
-    { keys: ["utn", "medrano 951"], lat: -34.5985, lng: -58.4202, formatted: "UTN (Av. Medrano 951, Almagro)" },
-    { keys: ["puerto madero"], lat: -34.6085, lng: -58.3635, formatted: "Puerto Madero" },
-    { keys: ["recoleta", "las heras", "santa fe y callao"], lat: -34.5895, lng: -58.3935, formatted: "Recoleta (Av. Las Heras / Av. Callao)" },
-    { keys: ["colegiales", "lacroze", "alvarez thomas"], lat: -34.5752, lng: -58.4492, formatted: "Av. Federico Lacroze y Av. Álvarez Thomas (Colegiales)" },
-    { keys: ["belgrano r", "melian", "cramer"], lat: -34.5675, lng: -58.4665, formatted: "Estación Belgrano R (Av. Crámer / Melián)" },
-    { keys: ["barrio chino", "arribenos", "barrancas de belgrano"], lat: -34.5582, lng: -58.4495, formatted: "Barrancas de Belgrano / Barrio Chino" }
+    { keys: ["obelisco", "9 de julio y corrientes", "corrientes y 9 de julio"], lat: -34.6037, lng: -58.3816, formatted: "Obelisco (Av. 9 de Julio y Av. Corrientes, CABA)" },
+    { keys: ["cabildo y juramento", "juramento y cabildo"], lat: -34.5622, lng: -58.4565, formatted: "Av. Cabildo y Av. Juramento (Belgrano, CABA)" },
+    { keys: ["acoyte y rivadavia", "rivadavia y acoyte", "primera junta"], lat: -34.6182, lng: -58.4368, formatted: "Av. Rivadavia y Av. Acoyte (Caballito, CABA)" },
+    { keys: ["corrientes y medrano", "medrano y corrientes"], lat: -34.6036, lng: -58.4208, formatted: "Av. Corrientes y Av. Medrano (Almagro, CABA)" },
+    { keys: ["cordoba y medrano", "medrano y cordoba"], lat: -34.5988, lng: -58.4205, formatted: "Av. Córdoba y Av. Medrano (Almagro Norte, CABA)" },
+    { keys: ["corrientes y scalabrini", "scalabrini ortiz y corrientes", "malabia"], lat: -34.5982, lng: -58.4392, formatted: "Av. Corrientes y Av. Scalabrini Ortiz (Villa Crespo, CABA)" },
+    { keys: ["santa fe y juan b justo", "puente pacifico", "pacifico", "palermo"], lat: -34.5782, lng: -58.4258, formatted: "Av. Santa Fe y Av. Juan B. Justo (Palermo, CABA)" },
+    { keys: ["plaza italia", "santa fe y sarmiento", "rural"], lat: -34.5815, lng: -58.4208, formatted: "Plaza Italia (Palermo, CABA)" },
+    { keys: ["plaza serrano", "cortazar", "serrano y honduras"], lat: -34.5885, lng: -58.4305, formatted: "Plaza Serrano / Honduras (Palermo Soho, CABA)" },
+    { keys: ["parque centenario", "diaz velez", "angel gallardo"], lat: -34.6065, lng: -58.4355, formatted: "Parque Centenario (Caballito / Almagro, CABA)" },
+    { keys: ["parque rivadavia"], lat: -34.6175, lng: -58.4342, formatted: "Parque Rivadavia (Caballito, CABA)" },
+    { keys: ["pedro goyena", "goyena"], lat: -34.6242, lng: -58.4395, formatted: "Av. Pedro Goyena 800 (Caballito Sur, CABA)" },
+    { keys: ["retiro", "estacion retiro", "libertador 100"], lat: -34.5912, lng: -58.3745, formatted: "Estación Retiro (CABA)" },
+    { keys: ["constitucion", "estacion constitucion"], lat: -34.6275, lng: -58.3812, formatted: "Estación Constitución (CABA)" },
+    { keys: ["once", "plaza miserere", "pueyrredon y rivadavia"], lat: -34.6098, lng: -58.4062, formatted: "Plaza Miserere / Once (CABA)" },
+    { keys: ["congreso", "callao y rivadavia"], lat: -34.6092, lng: -58.3922, formatted: "Congreso (Av. Callao y Av. Rivadavia, CABA)" },
+    { keys: ["ciudad universitaria", "fadu", "exactas", "nunez", "nuñez"], lat: -34.5425, lng: -58.4415, formatted: "Ciudad Universitaria / Núñez (CABA)" },
+    { keys: ["facultad de medicina", "fmed", "economicas", "cordoba 2100", "plaza houssay"], lat: -34.5992, lng: -58.3978, formatted: "Plaza Houssay / Av. Córdoba 2100 (CABA)" },
+    { keys: ["ingenieria", "fiuba", "paseo colon 850", "las heras 2200"], lat: -34.5885, lng: -58.3965, formatted: "Av. Las Heras 2200 (Recoleta, CABA)" },
+    { keys: ["utn", "medrano 951"], lat: -34.5985, lng: -58.4202, formatted: "UTN (Av. Medrano 951, Almagro, CABA)" },
+    { keys: ["puerto madero"], lat: -34.6085, lng: -58.3635, formatted: "Puerto Madero (CABA)" },
+    { keys: ["recoleta", "las heras", "santa fe y callao"], lat: -34.5895, lng: -58.3935, formatted: "Recoleta (CABA)" },
+    { keys: ["colegiales", "lacroze", "alvarez thomas"], lat: -34.5752, lng: -58.4492, formatted: "Colegiales (CABA)" },
+    { keys: ["belgrano r", "melian", "cramer"], lat: -34.5675, lng: -58.4665, formatted: "Belgrano R (CABA)" },
+    { keys: ["villa urquiza", "triunvirato", "saavedra"], lat: -34.5735, lng: -58.4865, formatted: "Villa Urquiza / Av. Triunvirato (CABA)" },
+    { keys: ["devoto", "villa devoto", "plaza arenales", "villa del parque"], lat: -34.6005, lng: -58.5115, formatted: "Villa Devoto / Plaza Arenales (CABA)" },
+    { keys: ["flores", "floresta", "carabobo", "san pedrito"], lat: -34.6285, lng: -58.4625, formatted: "Flores / Av. Rivadavia (CABA)" },
+    { keys: ["liniers", "mataderos", "villa luro"], lat: -34.6395, lng: -58.5245, formatted: "Liniers / Av. Rivadavia y Gral. Paz (CABA)" },
+    { keys: ["san telmo", "parque patricios", "barracas", "monserrat"], lat: -34.6215, lng: -58.3735, formatted: "San Telmo / Casco Histórico (CABA)" },
+    // GBA Zona Norte
+    { keys: ["olivos", "vicente lopez", "la lucila", "maipu", "puente saavedra"], lat: -34.5105, lng: -58.4865, formatted: "Olivos / Av. Maipú (Vicente López, GBA Norte)" },
+    { keys: ["munro", "florida oeste", "villa martelli"], lat: -34.5315, lng: -58.5215, formatted: "Munro / Florida Oeste (Vicente López, GBA Norte)" },
+    { keys: ["san isidro", "martinez", "acassuso", "beccar", "boulogne"], lat: -34.4725, lng: -58.5145, formatted: "San Isidro / Martínez (GBA Norte)" },
+    { keys: ["tigre", "san fernando", "pacheco", "nordelta", "don torcuato"], lat: -34.4255, lng: -58.5795, formatted: "Tigre Centro (GBA Norte)" },
+    { keys: ["pilar", "escobar", "campana", "zarate"], lat: -34.4585, lng: -58.9145, formatted: "Pilar Centro (Provincia de Buenos Aires)" },
+    { keys: ["san martin", "villa ballester", "unsam", "san andres"], lat: -34.5755, lng: -58.5385, formatted: "General San Martín / Villa Ballester (GBA Noroeste)" },
+    // GBA Zona Oeste
+    { keys: ["ramos mejia", "ramos", "haedo", "unlam", "san justo"], lat: -34.6415, lng: -58.5645, formatted: "Ramos Mejía (La Matanza, GBA Oeste)" },
+    { keys: ["caseros", "ciudad jardin", "palomar", "tres de febrero", "santos lugares"], lat: -34.6095, lng: -58.5635, formatted: "Caseros / Tres de Febrero (GBA Oeste)" },
+    { keys: ["moron", "castelar", "hurlingham"], lat: -34.6515, lng: -58.6225, formatted: "Morón / Castelar (GBA Oeste)" },
+    { keys: ["ituzaingo", "parque leloir", "padua", "merlo", "moreno", "lujan"], lat: -34.6595, lng: -58.6675, formatted: "Ituzaingó / Corredor Oeste (GBA Oeste)" },
+    // GBA Zona Sur y La Plata / PBA
+    { keys: ["avellaneda", "wilde", "sarandi", "gerli", "dock sud"], lat: -34.6625, lng: -58.3645, formatted: "Avellaneda Centro (Av. Mitre, GBA Sur)" },
+    { keys: ["lanus", "remedios de escalada", "lanusita", "monte chingolo"], lat: -34.7075, lng: -58.3905, formatted: "Lanús (GBA Sur)" },
+    { keys: ["lomas de zamora", "lomas", "las lomitas", "banfield", "temperley"], lat: -34.7605, lng: -58.4005, formatted: "Lomas de Zamora / Banfield (GBA Sur)" },
+    { keys: ["adrogue", "burzaco", "monte grande", "ezeiza", "canning"], lat: -34.7985, lng: -58.3895, formatted: "Adrogué / Almirante Brown (GBA Sur)" },
+    { keys: ["quilmes", "bernal", "berazategui", "ezpeleta", "florencio varela"], lat: -34.7245, lng: -58.2565, formatted: "Quilmes / Bernal (GBA Sur)" },
+    { keys: ["la plata", "city bell", "gonnet", "tolosa", "unlp", "plaza moreno"], lat: -34.9215, lng: -57.9545, formatted: "La Plata (Casco Urbano, Provincia de Buenos Aires)" },
+    { keys: ["mar del plata", "mdq", "tandil", "bahia blanca"], lat: -38.0055, lng: -57.5426, formatted: "Mar del Plata (Provincia de Buenos Aires)" }
   ];
 
   for (const lm of landmarks) {
@@ -967,8 +1506,8 @@ async function geocodeAddressInCaba(rawAddress) {
     }
   }
 
-  // 2. Interpolación por Avenida / Calle de CABA + Altura numérica (ej: "Av. Corrientes 3200", "Santa Fe 2400", "Rivadavia 5100", "Cabildo 2000")
-  const numMatch = lower.match(/\b(\d{2,4})\b/);
+  // 2. Interpolación por Avenida / Calle + Altura numérica (ej: "Av. Corrientes 3200", "Av. Maipú 1500", "Rivadavia 14000", "Hipólito Yrigoyen 4500")
+  const numMatch = lower.match(/\b(\d{2,5})\b/);
   const streetNum = numMatch ? parseInt(numMatch[1], 10) : null;
 
   const streetCorridors = [
@@ -976,9 +1515,12 @@ async function geocodeAddressInCaba(rawAddress) {
     { keys: ["cordoba"], startNum: 100, endNum: 6200, start: [-34.5990, -58.3700], end: [-34.5815, -58.4485] },
     { keys: ["santa fe"], startNum: 500, endNum: 5300, start: [-34.5955, -58.3755], end: [-34.5735, -58.4335] },
     { keys: ["cabildo"], startNum: 1, endNum: 4900, start: [-34.5735, -58.4335], end: [-34.5375, -58.4765] },
-    { keys: ["rivadavia"], startNum: 100, endNum: 7500, start: [-34.6082, -58.3720], end: [-34.6295, -58.4685] },
-    { keys: ["libertador"], startNum: 100, endNum: 8500, start: [-34.5905, -58.3765], end: [-34.5385, -58.4660] },
-    { keys: ["juan b justo", "juan b. justo"], startNum: 1000, endNum: 6000, start: [-34.5775, -58.4255], end: [-34.6195, -58.4675] },
+    { keys: ["maipu"], startNum: 1, endNum: 4200, start: [-34.5375, -58.4765], end: [-34.4925, -58.4935] },
+    { keys: ["rivadavia"], startNum: 100, endNum: 18500, start: [-34.6082, -58.3720], end: [-34.6515, -58.6225] },
+    { keys: ["hipolito yrigoyen", "pavon"], startNum: 100, endNum: 13500, start: [-34.6625, -58.3785], end: [-34.7985, -58.3895] },
+    { keys: ["mitre"], startNum: 100, endNum: 6500, start: [-34.6605, -58.3665], end: [-34.7025, -58.3215] },
+    { keys: ["libertador"], startNum: 100, endNum: 16500, start: [-34.5905, -58.3765], end: [-34.4705, -58.5085] },
+    { keys: ["juan b justo", "juan b. justo"], startNum: 1000, endNum: 9000, start: [-34.5775, -58.4255], end: [-34.6365, -58.5245] },
     { keys: ["scalabrini", "scalabrini ortiz"], startNum: 100, endNum: 3400, start: [-34.6035, -58.4360], end: [-34.5715, -58.4105] },
     { keys: ["medrano"], startNum: 1, endNum: 2000, start: [-34.6112, -58.4205], end: [-34.5915, -58.4185] },
     { keys: ["boedo"], startNum: 1, endNum: 2100, start: [-34.6115, -58.4190], end: [-34.6325, -58.4175] },
@@ -1000,9 +1542,9 @@ async function geocodeAddressInCaba(rawAddress) {
     }
   }
 
-  // 3. Fallback a OpenStreetMap Nominatim (para cualquier otra calle o dirección exacta en CABA)
+  // 3. Fallback a OpenStreetMap Nominatim (para cualquier calle, esquina o localidad de CABA y Provincia de Buenos Aires)
   try {
-    const q = encodeURIComponent(`${text}, Ciudad Autónoma de Buenos Aires, Argentina`);
+    const q = encodeURIComponent(`${text}, Buenos Aires, Argentina`);
     const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${q}`);
     if (resp.ok) {
       const results = await resp.json();
@@ -1021,7 +1563,7 @@ async function geocodeAddressInCaba(rawAddress) {
   return null;
 }
 
-// Muestra en la barra lateral y en el mapa un barrio dividido por sus distintas sub-zonas internas según cómo cambia el alquiler
+// Muestra en la barra lateral y en el mapa un barrio o localidad de CABA / Gran Buenos Aires / PBA dividido por sus sub-zonas internas
 function mentionNeighborhoodAndShowInternalSubzones(rawQuery) {
   const box = document.getElementById("neighborhood-internal-subzones-box");
   const input = document.getElementById("neighborhood-mention-input");
@@ -1029,38 +1571,82 @@ function mentionNeighborhoodAndShowInternalSubzones(rawQuery) {
 
   if (!box) return;
 
-  if (!q || q === "todos" || q === "todas") {
+  if (!q || q === "todos" || q === "todas" || q === "todo bs.as." || q === "buenos aires") {
     appState.mentionedBarrioSlug = null;
     box.style.display = "none";
     box.innerHTML = "";
     renderAffordabilityZonesOnMap();
-    if (leafletMap) leafletMap.setView([-34.5965, -58.4265], 13);
+    if (leafletMap) leafletMap.setView([-34.6150, -58.4450], 11);
     return;
   }
 
-  let matchedSlug = null;
-  if (q.includes("almagro") || q.includes("boedo")) matchedSlug = "almagro";
-  else if (q.includes("caballito") || q.includes("centenario") || q.includes("goyena")) matchedSlug = "caballito";
-  else if (q.includes("palermo") || q.includes("soho") || q.includes("hollywood") || q.includes("botanico")) matchedSlug = "palermo";
-  else if (q.includes("belgrano") || q.includes("barrancas") || q.includes("coghlan")) matchedSlug = "belgrano";
-  else if (q.includes("crespo") || q.includes("villa crespo")) matchedSlug = "villa-crespo";
-  else if (q.includes("colegiales") || q.includes("lacroze")) matchedSlug = "colegiales";
-  else if (q.includes("recoleta") || q.includes("chico")) matchedSlug = "recoleta";
+  let matchedZones = [];
 
-  const matchedZones = matchedSlug
-    ? MAP_AFFORDABILITY_ZONES.filter(z => z.slug === matchedSlug || (matchedSlug === "palermo" && z.id.includes("palermo")))
-    : MAP_AFFORDABILITY_ZONES.filter(z => z.name.toLowerCase().includes(q));
+  if (q === "caba" || q === "capital" || q === "capital federal") {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => !z.region || z.region === "caba");
+  } else if (q.includes("zona-norte") || q.includes("gba norte") || q.includes("zona norte")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.region === "zona-norte");
+  } else if (q.includes("zona-oeste") || q.includes("gba oeste") || q.includes("zona oeste")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.region === "zona-oeste");
+  } else if (q.includes("zona-sur") || q.includes("gba sur") || q.includes("zona sur")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.region === "zona-sur" || z.region === "la-plata");
+  } else if (q.includes("la-plata") || q.includes("la plata") || q.includes("city bell") || q.includes("gonnet") || q.includes("tolosa")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "la-plata" || z.region === "la-plata");
+  } else if (q.includes("almagro") || q.includes("boedo")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "almagro");
+  } else if (q.includes("caballito") || q.includes("centenario") || q.includes("goyena") || q.includes("chacabuco")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "caballito");
+  } else if (q.includes("palermo") || q.includes("soho") || q.includes("hollywood") || q.includes("botanico")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "palermo" || z.id.includes("palermo"));
+  } else if (q.includes("belgrano") || q.includes("barrancas") || q.includes("coghlan")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "belgrano");
+  } else if (q.includes("crespo") || q.includes("chacarita")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "villa-crespo");
+  } else if (q.includes("colegiales") || q.includes("lacroze")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "colegiales");
+  } else if (q.includes("recoleta") || q.includes("chico")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "recoleta");
+  } else if (q.includes("urquiza") || q.includes("saavedra")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "villa-urquiza");
+  } else if (q.includes("nunez") || q.includes("nuñez")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "nunez");
+  } else if (q.includes("devoto") || q.includes("villa del parque") || q.includes("paternal")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "villa-devoto");
+  } else if (q.includes("flores") || q.includes("floresta") || q.includes("liniers") || q.includes("mataderos") || q.includes("luro")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "flores");
+  } else if (q.includes("telmo") || q.includes("centro") || q.includes("monserrat") || q.includes("patricios") || q.includes("barracas") || q.includes("boca") || q.includes("madero")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "san-telmo");
+  } else if (q.includes("olivos") || q.includes("vicente lopez") || q.includes("lucila") || q.includes("florida") || q.includes("munro") || q.includes("martelli")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "vicente-lopez" || z.slug === "san-martin");
+  } else if (q.includes("san martin") || q.includes("ballester")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "san-martin");
+  } else if (q.includes("san isidro") || q.includes("martinez") || q.includes("acassuso") || q.includes("tigre") || q.includes("san fernando") || q.includes("pilar") || q.includes("pacheco")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "san-isidro" || z.region === "zona-norte");
+  } else if (q.includes("ramos") || q.includes("haedo") || q.includes("caseros") || q.includes("palomar") || q.includes("matanza") || q.includes("san justo") || q.includes("tres de febrero")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "ramos-mejia" || z.region === "zona-oeste");
+  } else if (q.includes("moron") || q.includes("castelar") || q.includes("ituzaingo") || q.includes("hurlingham") || q.includes("merlo") || q.includes("moreno") || q.includes("padua")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "moron" || z.region === "zona-oeste");
+  } else if (q.includes("avellaneda") || q.includes("wilde") || q.includes("sarandi") || q.includes("lanus") || q.includes("escalada") || q.includes("gerli")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "lanus" || z.region === "zona-sur");
+  } else if (q.includes("lomas") || q.includes("banfield") || q.includes("temperley") || q.includes("adrogue") || q.includes("quilmes") || q.includes("bernal") || q.includes("berazategui") || q.includes("monte grande") || q.includes("ezeiza")) {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z => z.slug === "lomas-de-zamora" || z.region === "zona-sur");
+  } else {
+    matchedZones = MAP_AFFORDABILITY_ZONES.filter(z =>
+      z.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(q) ||
+      (z.urban_boundary_note || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(q)
+    );
+  }
 
   if (matchedZones.length === 0) {
     box.style.display = "flex";
-    box.innerHTML = `<div style="font-size:0.73rem; color:#fca5a5;">No encontramos ese barrio cargado. Probá con Almagro, Caballito, Palermo, Belgrano, Villa Crespo, Colegiales o Recoleta.</div>`;
+    box.innerHTML = `<div style="font-size:0.73rem; color:#fca5a5;">No encontramos esa zona en los polígonos precargados, pero podés dibujarla libremente en el mapa o probar con cualquier barrio de CABA, Zona Norte (Olivos, San Isidro, Tigre, San Martín), Zona Oeste (Ramos, Morón, Castelar, Caseros), Zona Sur (Avellaneda, Lanús, Lomas, Quilmes) o La Plata.</div>`;
     return;
   }
 
-  appState.mentionedBarrioSlug = matchedSlug || q;
+  appState.mentionedBarrioSlug = q;
   renderAffordabilityZonesOnMap();
 
-  // Ajustar zoom del mapa para mostrar juntas todas las sub-zonas internas de ese barrio
+  // Ajustar zoom del mapa para mostrar juntas todas las sub-zonas internas de ese barrio o región
   if (leafletMap && matchedZones.length > 0) {
     const allCoords = matchedZones.flatMap(z => z.coords);
     leafletMap.fitBounds(allCoords, { padding: [35, 35], maxZoom: 14 });
@@ -1073,11 +1659,12 @@ function mentionNeighborhoodAndShowInternalSubzones(rawQuery) {
     </div>
     ${matchedZones.map(z => {
       const zm = computeZoneAffordabilityMetrics(z);
+      const pctText = zm.hasSalary ? `(${zm.pctRent}%)` : "";
       return `
         <div style="background:var(--bg-primary); border-left:3.5px solid ${zm.rentHex}; padding:0.45rem 0.55rem; border-radius:4px; border:1px solid var(--card-border);">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:0.35rem;">
             <strong style="color:#fff; font-size:0.76rem;">${escapeHtml(z.name.split(" (")[0])}</strong>
-            <span style="color:${zm.rentHex}; font-weight:800; font-size:0.74rem;">$${z.alquiler_ars.toLocaleString("es-AR")} (${zm.pctRent}%)</span>
+            <span style="color:${zm.rentHex}; font-weight:800; font-size:0.74rem;">$${z.alquiler_ars.toLocaleString("es-AR")} ${pctText}</span>
           </div>
           <div style="font-size:0.69rem; color:var(--text-secondary); margin:0.2rem 0 0.35rem; line-height:1.3;">
             ${escapeHtml(z.bridge_price_effect)}
@@ -1115,27 +1702,6 @@ function mentionNeighborhoodAndShowInternalSubzones(rawQuery) {
 
 function setupInteractiveMap() {
   selectedZoneForDeepDive = MAP_AFFORDABILITY_ZONES[0];
-
-  // Tabs: Mapa vs Búsqueda Clásica
-  const tabMapa = document.getElementById("tab-btn-mapa");
-  const tabFiltros = document.getElementById("tab-btn-filtros");
-  const contentMapa = document.getElementById("tab-content-mapa");
-  const contentFiltros = document.getElementById("tab-content-filtros");
-
-  tabMapa?.addEventListener("click", () => {
-    tabMapa.classList.add("active");
-    tabFiltros.classList.remove("active");
-    contentMapa.style.display = "block";
-    contentFiltros.style.display = "none";
-    ensureMapReadyAndVisible();
-  });
-
-  tabFiltros?.addEventListener("click", () => {
-    tabFiltros.classList.add("active");
-    tabMapa.classList.remove("active");
-    contentFiltros.style.display = "block";
-    contentMapa.style.display = "none";
-  });
 
   // Map Budget Filter Live Sync
   document.getElementById("map-filter-operation")?.addEventListener("change", (e) => {
@@ -1276,9 +1842,9 @@ function initLeafletRealMap() {
   if (leafletMap) return;
 
   leafletMap = L.map("leaflet-map", {
-    center: [-34.5965, -58.4265],
-    zoom: 13,
-    minZoom: 11,
+    center: [-34.6150, -58.4450],
+    zoom: 11,
+    minZoom: 6,
     maxZoom: 18,
     zoomControl: true
   });
@@ -1775,10 +2341,33 @@ function clearPoiRoutesHighlight() {
 
 // Evalúa los 2 cálculos separados (Alquiler vs Estilo de Vida) y el Costo Genuino de Vivienda (Alquiler + Expensas + Impuestos/Servicios Fijos)
 function computeZoneAffordabilityMetrics(zone) {
-  const salary = appState.salary || 1500000;
+  const hasSalary = appState.salary && appState.salary > 0;
+  const salary = hasSalary ? appState.salary : 0;
+
+  const rentTotal = zone.alquiler_ars + zone.expensas_ars;
+  const housingGenuineTotal = rentTotal + zone.servicios_ars + zone.transporte_ars;
+  const lifestyleTotal = zone.servicios_ars + zone.canasta_comercios_ars + zone.transporte_ars;
+
+  if (!hasSalary) {
+    return {
+      hasSalary: false,
+      rentTotal,
+      pctRent: "—",
+      rentHex: "#38bdf8",
+      rentLabel: "💬 Ingresá tu sueldo",
+      housingGenuineTotal,
+      pctHousingGenuine: "—",
+      lifestyleTotal,
+      pctLifestyle: "—",
+      lifeHex: "#38bdf8",
+      lifeLabel: "💬 Ingresá tu sueldo",
+      verdictText: "💬 Ingresá tu sueldo en el panel para ver si te conviene",
+      totalMensual: rentTotal + lifestyleTotal,
+      pctTotal: "—"
+    };
+  }
 
   // Costo de Alquiler + Expensas (Escala: <=35% Verde, 35-45% Amarillo, 45-55% Naranja, >55% Rojo)
-  const rentTotal = zone.alquiler_ars + zone.expensas_ars;
   const pctRent = (rentTotal / salary) * 100;
   let rentHex = "#10b981";
   let rentLabel = "🟢 Verde (≤35%)";
@@ -1786,12 +2375,9 @@ function computeZoneAffordabilityMetrics(zone) {
   else if (pctRent > 45 && pctRent <= 55) { rentHex = "#f97316"; rentLabel = "🟠 Naranja (45-55%)"; }
   else if (pctRent > 55) { rentHex = "#ef4444"; rentLabel = "🔴 Rojo (>55%)"; }
 
-  // Costo Genuino Total de la Vivienda = Alquiler + Expensas + Impuestos y Servicios Fijos (ABL, Luz, Gas, Agua, Internet, SUBE)
-  const housingGenuineTotal = rentTotal + zone.servicios_ars + zone.transporte_ars;
   const pctHousingGenuine = (housingGenuineTotal / salary) * 100;
 
   // Costo de Vida separado (0-25% Verde, 25-50% Amarillo, 50-75% Naranja, 75-100% Rojo)
-  const lifestyleTotal = zone.servicios_ars + zone.canasta_comercios_ars + zone.transporte_ars;
   const pctLifestyle = (lifestyleTotal / salary) * 100;
   let lifeHex = "#10b981";
   let lifeLabel = "🟢 Verde (0-25%)";
@@ -1809,6 +2395,7 @@ function computeZoneAffordabilityMetrics(zone) {
   }
 
   return {
+    hasSalary: true,
     rentTotal,
     pctRent: pctRent.toFixed(1),
     rentHex,
@@ -1886,12 +2473,13 @@ function renderAffordabilityZonesOnMap() {
     // Etiqueta compacta en el centroide del polígono orgánico
     const [cLat, cLng] = getZoneCenter(zone);
     const shortTitle = zone.name.split(" (")[0];
+    const badgeValue = m.hasSalary ? `${m.pctRent}%` : `$${Math.round(zone.alquiler_ars / 1000)}k`;
     const labelIcon = L.divIcon({
       className: "zone-centroid-marker",
       html: `
         <div class="zone-label-leaflet" style="border-color:${m.rentHex}; transform:translate(-50%, -50%);">
           <span>${escapeHtml(shortTitle)}</span>
-          <span style="color:${m.rentHex}; margin-left:4px;">${m.pctRent}%</span>
+          <span style="color:${m.rentHex}; margin-left:4px;">${badgeValue}</span>
         </div>
       `,
       iconSize: [0, 0]
@@ -2623,18 +3211,18 @@ function readClassicFiltersFromDOM() {
   cf.operation = getVal("filter-operation", appState.selectedOperation || "alquiler");
   cf.currency = getVal("filter-currency", "ARS");
   cf.minPrice = parseInt(getVal("filter-min-price", "0"), 10) || 0;
-  cf.maxPrice = parseInt(getVal("filter-max-price", String(appState.maxPrice || 1500000)), 10) || 1500000;
-  cf.maxExpensas = parseInt(getVal("filter-max-expensas", "250000"), 10) || 250000;
+  cf.maxPrice = parseInt(getVal("filter-max-price", "0"), 10) || 0;
+  cf.maxExpensas = parseInt(getVal("filter-max-expensas", "0"), 10) || 0;
   cf.propertyType = getVal("filter-property-type", "departamento");
-  cf.disposition = getVal("filter-disposition", "frente");
-  cf.orientation = getVal("filter-orientation", "norte");
-  cf.antiquity = getVal("filter-antiquity", "hasta_10");
-  cf.minRooms = parseInt(getVal("filter-min-rooms", "2"), 10) || 2;
-  cf.bedrooms = getVal("filter-bedrooms", "1");
+  cf.disposition = getVal("filter-disposition", "indistinto");
+  cf.orientation = getVal("filter-orientation", "indistinto");
+  cf.antiquity = getVal("filter-antiquity", "indistinto");
+  cf.minRooms = parseInt(getVal("filter-min-rooms", "1"), 10) || 1;
+  cf.bedrooms = getVal("filter-bedrooms", "0");
   cf.bathrooms = getVal("filter-bathrooms", "1");
-  cf.minM2Covered = parseInt(getVal("filter-min-m2-covered", "42"), 10) || 42;
-  cf.maxM2Total = parseInt(getVal("filter-max-m2-total", "95"), 10) || 95;
-  cf.garage = getVal("filter-garage", "no");
+  cf.minM2Covered = parseInt(getVal("filter-min-m2-covered", "0"), 10) || 0;
+  cf.maxM2Total = parseInt(getVal("filter-max-m2-total", "0"), 10) || 0;
+  cf.garage = getVal("filter-garage", "indistinto");
 
   cf.features = Array.from(document.querySelectorAll(".classic-feature-cb:checked")).map(cb => cb.value);
   cf.amenities = Array.from(document.querySelectorAll(".classic-amenity-cb:checked")).map(cb => cb.value);
@@ -2642,7 +3230,9 @@ function readClassicFiltersFromDOM() {
 
   appState.classicFilters = cf;
   appState.selectedOperation = cf.operation === "venta" ? "venta" : "alquiler";
-  appState.maxPrice = cf.maxPrice;
+  if (cf.maxPrice > 0) {
+    appState.maxPrice = cf.maxPrice;
+  }
   return cf;
 }
 
@@ -2653,38 +3243,32 @@ function resetClassicFiltersForm() {
   };
   setVal("filter-operation", "alquiler");
   setVal("filter-currency", "ARS");
-  setVal("filter-min-price", "0");
-  setVal("filter-max-price", "1500000");
-  setVal("filter-max-expensas", "250000");
+  setVal("filter-min-price", "");
+  setVal("filter-max-price", "");
+  setVal("filter-max-expensas", "");
   setVal("filter-property-type", "departamento");
-  setVal("filter-disposition", "frente");
-  setVal("filter-orientation", "norte");
-  setVal("filter-antiquity", "hasta_10");
-  setVal("filter-min-rooms", "2");
-  setVal("filter-bedrooms", "1");
+  setVal("filter-disposition", "indistinto");
+  setVal("filter-orientation", "indistinto");
+  setVal("filter-antiquity", "indistinto");
+  setVal("filter-min-rooms", "1");
+  setVal("filter-bedrooms", "0");
   setVal("filter-bathrooms", "1");
-  setVal("filter-min-m2-covered", "42");
-  setVal("filter-max-m2-total", "95");
-  setVal("filter-garage", "no");
+  setVal("filter-min-m2-covered", "");
+  setVal("filter-max-m2-total", "");
+  setVal("filter-garage", "indistinto");
 
-  document.querySelectorAll(".classic-feature-cb").forEach(cb => {
-    cb.checked = ["balcon", "cocina_separada", "lavadero"].includes(cb.value);
-  });
-  document.querySelectorAll(".classic-amenity-cb").forEach(cb => {
-    cb.checked = ["sum", "seguridad"].includes(cb.value);
-  });
-  document.querySelectorAll(".classic-req-cb").forEach(cb => {
-    cb.checked = ["caucion", "bajas_expensas"].includes(cb.value);
+  document.querySelectorAll(".classic-feature-cb, .classic-amenity-cb, .classic-req-cb").forEach(cb => {
+    cb.checked = false;
   });
   readClassicFiltersFromDOM();
 }
 
-// Construye los links reales con los filtros ya aplicados (Zona + Operación + Ambientes + Tipo de Inmueble + Presupuesto) para cada portal que el usuario añadió
+// Construye los links reales con los filtros ya aplicados (Zona de CABA o GBA/PBA + Operación + Ambientes + Tipo de Inmueble + Presupuesto)
 function buildFilteredPortalUrl(portalDomain, zoneNameOrSlug) {
   const cf = readClassicFiltersFromDOM();
   const d = (portalDomain || "").toLowerCase();
   const op = appState.selectedOperation === "venta" ? "venta" : "alquiler";
-  const maxP = appState.maxPrice || 1500000;
+  const maxP = appState.maxPrice || 0;
 
   const mainRooms = appState.activeTab === "filtros"
     ? cf.minRooms
@@ -2696,29 +3280,47 @@ function buildFilteredPortalUrl(portalDomain, zoneNameOrSlug) {
     ph: "ph",
     casa: "casas",
     duplex: "departamentos",
-    piso: "departamentos",
+    semipiso: "departamentos",
     loft: "departamentos"
   };
   const propPlural = propTypeMap[cf.propertyType] || "departamentos";
 
-  let slug = (zoneNameOrSlug || "palermo").toLowerCase();
-  if (slug.includes("almagro")) slug = "almagro";
-  else if (slug.includes("caballito")) slug = "caballito";
-  else if (slug.includes("villa crespo") || slug.includes("villa-crespo")) slug = "villa-crespo";
-  else if (slug.includes("colegiales")) slug = "colegiales";
-  else if (slug.includes("belgrano")) slug = "belgrano";
-  else if (slug.includes("recoleta") || slug.includes("chico")) slug = "recoleta";
-  else if (slug.includes("palermo")) slug = "palermo";
-  else slug = "capital-federal";
+  let raw = (zoneNameOrSlug || "buenos-aires").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  let slug = "capital-federal";
+  let mlRegion = "capital-federal";
+
+  if (raw.includes("almagro")) slug = "almagro";
+  else if (raw.includes("caballito")) slug = "caballito";
+  else if (raw.includes("villa crespo") || raw.includes("villa-crespo")) slug = "villa-crespo";
+  else if (raw.includes("colegiales")) slug = "colegiales";
+  else if (raw.includes("belgrano")) slug = "belgrano";
+  else if (raw.includes("recoleta") || raw.includes("chico")) slug = "recoleta";
+  else if (raw.includes("palermo")) slug = "palermo";
+  else if (raw.includes("urquiza") || raw.includes("saavedra")) slug = "villa-urquiza";
+  else if (raw.includes("nunez")) slug = "nunez";
+  else if (raw.includes("devoto") || raw.includes("parque")) slug = "villa-devoto";
+  else if (raw.includes("flores") || raw.includes("floresta") || raw.includes("liniers")) slug = "flores";
+  else if (raw.includes("telmo") || raw.includes("centro") || raw.includes("barracas")) slug = "san-telmo";
+  else if (raw.includes("vicente-lopez") || raw.includes("olivos") || raw.includes("lucila")) { slug = "vicente-lopez"; mlRegion = "bs-as-gba-norte"; }
+  else if (raw.includes("san-martin") || raw.includes("munro") || raw.includes("ballester")) { slug = "general-san-martin"; mlRegion = "bs-as-gba-norte"; }
+  else if (raw.includes("san-isidro") || raw.includes("martinez") || raw.includes("tigre") || raw.includes("pilar")) { slug = "san-isidro"; mlRegion = "bs-as-gba-norte"; }
+  else if (raw.includes("ramos") || raw.includes("haedo") || raw.includes("caseros")) { slug = "ramos-mejia"; mlRegion = "bs-as-gba-oeste"; }
+  else if (raw.includes("moron") || raw.includes("castelar") || raw.includes("ituzaingo")) { slug = "moron"; mlRegion = "bs-as-gba-oeste"; }
+  else if (raw.includes("lanus") || raw.includes("avellaneda") || raw.includes("wilde")) { slug = "lanus"; mlRegion = "bs-as-gba-sur"; }
+  else if (raw.includes("lomas") || raw.includes("banfield") || raw.includes("quilmes") || raw.includes("adrogue")) { slug = "lomas-de-zamora"; mlRegion = "bs-as-gba-sur"; }
+  else if (raw.includes("la-plata") || raw.includes("la plata")) { slug = "la-plata"; mlRegion = "bs-as-gba-sur"; }
+
+  const priceSuffixZp = maxP > 0 ? `-menos-${maxP}-pesos` : "";
+  const priceSuffixAp = maxP > 0 ? `-hasta-${maxP}-pesos` : "";
 
   if (d.includes("zonaprop")) {
-    return `https://www.zonaprop.com.ar/${propPlural}-${op}-${slug}-${ambCount}-ambientes-menos-${maxP}-pesos.html`;
+    return `https://www.zonaprop.com.ar/${propPlural}-${op}-${slug}-${ambCount}-ambientes${priceSuffixZp}.html`;
   }
   if (d.includes("argenprop")) {
-    return `https://www.argenprop.com/${propPlural}/${op}/${slug}/${ambCount}-ambientes-hasta-${maxP}-pesos`;
+    return `https://www.argenprop.com/${propPlural}/${op}/${slug}/${ambCount}-ambientes${priceSuffixAp}`;
   }
   if (d.includes("mercadolibre")) {
-    return `https://inmuebles.mercadolibre.com.ar/${propPlural}/${op}/capital-federal/${slug}/_${ambCount}-ambientes`;
+    return `https://inmuebles.mercadolibre.com.ar/${propPlural}/${op}/${mlRegion}/${slug}/_${ambCount}-ambientes`;
   }
   if (d.includes("remax")) {
     return `https://www.remax.com.ar/listings/${op === 'venta' ? 'buy' : 'rent'}?address=${encodeURIComponent(slug)}&rooms=${ambCount}`;

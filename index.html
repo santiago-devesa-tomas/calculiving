@@ -23,6 +23,7 @@
 
       <div class="header-step-indicator">
         <button class="header-back-btn" id="header-back-btn">← Volver</button>
+        <button class="btn-sm btn-secondary" id="header-reset-all-btn" title="Borrar todo y empezar de cero" style="font-size:0.75rem; padding:0.3rem 0.65rem;">🧹 Limpiar todo</button>
         <span class="current-step-badge" id="current-step-label">Tipo de Búsqueda</span>
       </div>
     </div>
@@ -58,10 +59,10 @@
           <div class="card-icon">🔍</div>
           <div>
             <h3>Buscar personalmente</h3>
-            <p>Cargá los sitios web de búsqueda y delimitá en el mapa tu zona exacta calle por calle.</p>
+            <p>Búsqueda clásica: elegí ambientes, baños, edificio o casa, metros cuadrados, cochera y comodidades.</p>
           </div>
           <button class="card-action-btn">
-            <span>Cargar Sitios y Buscar</span>
+            <span>Elegir Filtros Clásicos</span>
             <span>→</span>
           </button>
         </article>
@@ -158,14 +159,8 @@
       </div>
     </section>
 
-    <!-- 3. DÓNDE BUSCAR: MAPA INTERACTIVO (SIN CABECERA NI CASILLA DE BOT ARRIBA; BUBBLE SPEECH EN FILTRAR POR PRESUPUESTO) -->
+    <!-- 3. DÓNDE BUSCAR: MAPA INTERACTIVO (SIN PESTAÑAS ARRIBA; BÚSQUEDA CLÁSICA ES LA OPCIÓN B DEL INICIO) -->
     <section class="screen" id="screen-metodo">
-      <div class="search-tabs-row">
-        <button class="search-tab-pill active" id="tab-btn-mapa">🗺️ Delimitar en el Mapa</button>
-        <button class="search-tab-pill" id="tab-btn-filtros">⚙️ Búsqueda Clásica (Filtros de Inmueble)</button>
-      </div>
-
-      <!-- PESTAÑA MAPA -->
       <div id="tab-content-mapa">
         <div class="map-page-layout">
           <!-- Sidebar del mapa -->
@@ -184,21 +179,21 @@
                 <label style="font-size:0.74rem; color:#bae6fd; font-weight:700; display:block; margin-bottom:0.2rem;">💵 Tu Sueldo Mensual (ARS):</label>
                 <div class="salary-input-wrapper" style="width:100%;">
                   <span class="currency-symbol">$</span>
-                  <input type="number" id="global-salary-input" class="salary-input" style="width:100%;" value="1500000" step="50000" placeholder="Ej: 1500000">
+                  <input type="number" id="global-salary-input" class="salary-input" style="width:100%;" value="" step="50000" placeholder="Ingresá tu sueldo (ej: 1500000)" autocomplete="off">
                 </div>
               </div>
 
               <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem; margin-bottom:0.55rem;">
                 <div>
                   <label style="font-size:0.72rem; color:var(--text-secondary); display:block; margin-bottom:0.2rem;">Operación:</label>
-                  <select id="map-filter-operation" class="salary-input" style="width:100%; font-size:0.78rem; padding:0.3rem 0.45rem;">
+                  <select id="map-filter-operation" class="salary-input" style="width:100%; font-size:0.78rem; padding:0.3rem 0.45rem;" autocomplete="off">
                     <option value="alquiler" selected>Alquiler</option>
                     <option value="venta">Compra-Venta</option>
                   </select>
                 </div>
                 <div>
                   <label style="font-size:0.72rem; color:var(--text-secondary); display:block; margin-bottom:0.2rem;">Tope Alquiler:</label>
-                  <input type="number" id="map-filter-max-price" class="salary-input" style="width:100%; font-size:0.78rem; padding:0.3rem 0.45rem;" value="950000" step="50000">
+                  <input type="number" id="map-filter-max-price" class="salary-input" style="width:100%; font-size:0.78rem; padding:0.3rem 0.45rem;" value="" step="50000" placeholder="Sin tope" autocomplete="off">
                 </div>
               </div>
 
@@ -207,31 +202,34 @@
               </button>
 
               <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.72rem; color:#e2e8f0; cursor:pointer; background:rgba(15,23,42,0.55); padding:0.35rem 0.5rem; border-radius:4px;">
-                <input type="checkbox" id="hover-auto-navigate-toggle">
+                <input type="checkbox" id="hover-auto-navigate-toggle" autocomplete="off">
                 <span>Saltar al detalle automáticamente al dejar el mouse quieto</span>
               </label>
             </div>
 
-            <!-- AÑADIR ZONA MENCIONÁNDOLA (SEPARA EL BARRIO EN SUS SUB-ZONAS INTERNAS SEGÚN CAMBIA EL ALQUILER) -->
+            <!-- AÑADIR ZONA MENCIONÁNDOLA (EXTENDIDO A TODA CABA Y GRAN BUENOS AIRES / PBA) -->
             <div style="background:rgba(15,23,42,0.55); border:1px solid var(--card-border); border-radius:var(--radius-sm); padding:0.7rem;">
               <h4 style="font-size: 0.8rem; text-transform: uppercase; color: var(--accent-cyan); margin-bottom: 0.3rem; font-weight:800;">
-                🏙️ Mencionar Barrio (Sub-zonas Internas)
+                🏙️ Mencionar Barrio o Localidad (Todo Buenos Aires)
               </h4>
               <p style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.45rem; line-height:1.35;">
-                Escribí o elegí un barrio para ver en el mapa cómo se divide internamente (norte/sur, vías, puentes o avenidas) y cuánto cambia el alquiler en cada parte:
+                Escribí o elegí cualquier barrio de <strong>Capital Federal</strong> o localidad de <strong>Zona Norte, Oeste, Sur y La Plata</strong> para ver sus sub-zonas internas según cambia el alquiler:
               </p>
               <div style="display:flex; gap:0.35rem; margin-bottom:0.45rem;">
-                <input type="text" id="neighborhood-mention-input" class="salary-input" placeholder="Ej: Almagro, Caballito, Palermo, Belgrano..." style="flex:1; font-size:0.76rem; padding:0.35rem 0.55rem;">
+                <input type="text" id="neighborhood-mention-input" class="salary-input" placeholder="Ej: Caballito, Olivos, San Isidro, Morón, Ramos Mejía, Lanús, Quilmes, La Plata..." style="flex:1; font-size:0.74rem; padding:0.35rem 0.55rem;" autocomplete="off">
                 <button type="button" id="btn-mention-neighborhood" class="btn-sm btn-primary" style="padding:0.35rem 0.65rem; font-size:0.75rem;">Ver</button>
               </div>
-              <div style="display:flex; flex-wrap:wrap; gap:0.3rem; margin-bottom:0.45rem;">
-                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="almagro" style="font-size:0.68rem; padding:0.18rem 0.45rem;">Almagro</button>
-                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="caballito" style="font-size:0.68rem; padding:0.18rem 0.45rem;">Caballito</button>
-                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="palermo" style="font-size:0.68rem; padding:0.18rem 0.45rem;">Palermo</button>
-                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="belgrano" style="font-size:0.68rem; padding:0.18rem 0.45rem;">Belgrano</button>
-                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="villa-crespo" style="font-size:0.68rem; padding:0.18rem 0.45rem;">V. Crespo</button>
-                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="colegiales" style="font-size:0.68rem; padding:0.18rem 0.45rem;">Colegiales</button>
-                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="todos" style="font-size:0.68rem; padding:0.18rem 0.45rem; color:#38bdf8;">Ver todos</button>
+              <div style="display:flex; flex-wrap:wrap; gap:0.28rem; margin-bottom:0.45rem;">
+                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="caba" style="font-size:0.66rem; padding:0.16rem 0.42rem;">CABA</button>
+                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="zona-norte" style="font-size:0.66rem; padding:0.16rem 0.42rem;">GBA Norte</button>
+                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="zona-oeste" style="font-size:0.66rem; padding:0.16rem 0.42rem;">GBA Oeste</button>
+                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="zona-sur" style="font-size:0.66rem; padding:0.16rem 0.42rem;">GBA Sur</button>
+                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="la-plata" style="font-size:0.66rem; padding:0.16rem 0.42rem;">La Plata</button>
+                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="almagro" style="font-size:0.66rem; padding:0.16rem 0.42rem;">Almagro</button>
+                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="caballito" style="font-size:0.66rem; padding:0.16rem 0.42rem;">Caballito</button>
+                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="palermo" style="font-size:0.66rem; padding:0.16rem 0.42rem;">Palermo</button>
+                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="belgrano" style="font-size:0.66rem; padding:0.16rem 0.42rem;">Belgrano</button>
+                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="todos" style="font-size:0.66rem; padding:0.16rem 0.42rem; color:#38bdf8;">Todo Bs.As.</button>
               </div>
               <!-- Desglose de las divisiones internas del barrio mencionado -->
               <div id="neighborhood-internal-subzones-box" style="display:none; flex-direction:column; gap:0.35rem; margin-top:0.35rem; padding-top:0.45rem; border-top:1px dashed var(--card-border);"></div>
@@ -258,19 +256,19 @@
                 <h4 style="font-size: 0.82rem; text-transform: uppercase; color: var(--text-muted); font-weight:700;">
                   📍 Puntos de Interés (Dirección o Arrastrar)
                 </h4>
-                <span style="font-size:0.68rem; color:var(--accent-cyan); font-weight:700;" id="pois-count-badge">3 activos</span>
+                <span style="font-size:0.68rem; color:var(--accent-cyan); font-weight:700;" id="pois-count-badge">0 activos</span>
               </div>
               <p style="font-size: 0.71rem; color: var(--text-secondary); margin-bottom: 0.45rem; line-height:1.35;">
-                Escribí la <strong>dirección/esquina</strong> (o arrastrá el pin en el mapa). Si borrás puntos, las letras <strong>A, B, C...</strong> se reordenan solas. Pasá el mouse o tocá un punto para ver las rutas nítidas.
+                Escribí la <strong>dirección, esquina o localidad</strong> de CABA o Provincia (o arrastrá el pin). Las letras <strong>A, B, C...</strong> se ordenan solas.
               </p>
 
               <!-- Barra para sumar nuevos Puntos de Interés con nombre + dirección + botón + -->
               <div style="display:flex; flex-direction:column; gap:0.35rem; margin-bottom:0.55rem; background:rgba(15,23,42,0.5); padding:0.45rem; border-radius:6px; border:1px solid var(--card-border);">
                 <div style="display:flex; gap:0.35rem;">
-                  <input type="text" id="new-poi-name-input" class="salary-input" placeholder="Nombre (ej: Trabajo, Facultad)..." style="flex:1; font-size:0.74rem; padding:0.3rem 0.5rem;">
+                  <input type="text" id="new-poi-name-input" class="salary-input" placeholder="Nombre (ej: Trabajo, Facultad)..." style="flex:1; font-size:0.74rem; padding:0.3rem 0.5rem;" autocomplete="off">
                   <button type="button" id="btn-add-poi" class="btn-sm btn-primary" title="Sumar nuevo Punto de Interés al mapa" style="width:30px; height:30px; border-radius:50%; padding:0; display:flex; align-items:center; justify-content:center; font-size:1.1rem; font-weight:900; flex-shrink:0;">+</button>
                 </div>
-                <input type="text" id="new-poi-address-input" class="salary-input" placeholder="Dirección o esquina (ej: Av. Corrientes 3200, Cabildo y Juramento)..." style="width:100%; font-size:0.73rem; padding:0.3rem 0.5rem;">
+                <input type="text" id="new-poi-address-input" class="salary-input" placeholder="Dirección o localidad (ej: Av. Corrientes 3200, Av. Maipú 1500 Olivos, Morón, Quilmes)..." style="width:100%; font-size:0.73rem; padding:0.3rem 0.5rem;" autocomplete="off">
               </div>
 
               <!-- Lista dinámica de Puntos de Interés -->
@@ -325,20 +323,22 @@
           </div>
         </div>
       </div>
+    </section>
 
-      <!-- PESTAÑA BÚSQUEDA CLÁSICA (FILTROS COMPLETOS DE PORTALES INMOBILIARIOS, SIN FILTRO DE ZONA) -->
-      <div id="tab-content-filtros" style="display: none;">
+    <!-- OPCIÓN B: BUSCAR PERSONALMENTE (BÚSQUEDA CLÁSICA DE INMUEBLES, SIN FILTRO DE ZONA) -->
+    <section class="screen" id="screen-busqueda-clasica">
+      <div id="tab-content-filtros">
         <div style="max-width: 1040px; margin: 1.25rem auto; background: var(--card-bg); border: 1px solid var(--card-border); padding: 1.75rem; border-radius: var(--radius-md); box-shadow: var(--shadow-lg);">
           <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem; margin-bottom:1.25rem; padding-bottom:1rem; border-bottom:1px solid var(--card-border);">
             <div>
               <span style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--accent-cyan); font-weight:800;">
-                Búsqueda Clásica de Inmuebles
+                Opción B · Buscar Personalmente (Búsqueda Clásica)
               </span>
               <h3 style="font-size:1.45rem; font-weight:800; color:#fff; margin-top:0.15rem;">
                 Configurá las Características, Dimensiones, Comodidades y Requisitos
               </h3>
               <p style="font-size:0.84rem; color:var(--text-secondary); margin-top:0.2rem;">
-                Elegí todos los filtros habituales de los portales inmobiliarios (excepto la zona, que se evalúa por sub-barrios y costo de vida). Estos parámetros se inyectan directamente en los links finales hacia tus sitios cargados.
+                Elegí las opciones clásicas de filtrado de los portales inmobiliarios (excepto la zona, que se define después en el mapa).
               </p>
             </div>
             <button type="button" class="btn-sm btn-secondary" id="btn-reset-classic-filters">↺ Restablecer filtros</button>
@@ -352,7 +352,7 @@
             <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(185px, 1fr)); gap:0.85rem;">
               <div>
                 <label style="font-size:0.76rem; color:var(--text-secondary); display:block; margin-bottom:0.25rem; font-weight:600;">Tipo de Operación:</label>
-                <select id="filter-operation" class="salary-input" style="width:100%;">
+                <select id="filter-operation" class="salary-input" style="width:100%;" autocomplete="off">
                   <option value="alquiler" selected>Alquiler tradicional (24 meses)</option>
                   <option value="temporal">Alquiler temporal / Amoblado</option>
                   <option value="venta">Compra-Venta</option>
@@ -360,22 +360,22 @@
               </div>
               <div>
                 <label style="font-size:0.76rem; color:var(--text-secondary); display:block; margin-bottom:0.25rem; font-weight:600;">Moneda:</label>
-                <select id="filter-currency" class="salary-input" style="width:100%;">
+                <select id="filter-currency" class="salary-input" style="width:100%;" autocomplete="off">
                   <option value="ARS" selected>Pesos Argentinos ($ ARS)</option>
                   <option value="USD">Dólares (u$s USD)</option>
                 </select>
               </div>
               <div>
                 <label style="font-size:0.76rem; color:var(--text-secondary); display:block; margin-bottom:0.25rem; font-weight:600;">Precio Mínimo:</label>
-                <input type="number" id="filter-min-price" class="salary-input" style="width:100%;" value="0" step="50000" placeholder="Sin mínimo">
+                <input type="number" id="filter-min-price" class="salary-input" style="width:100%;" value="" step="50000" placeholder="Sin mínimo" autocomplete="off">
               </div>
               <div>
                 <label style="font-size:0.76rem; color:var(--text-secondary); display:block; margin-bottom:0.25rem; font-weight:600;">Precio Máximo:</label>
-                <input type="number" id="filter-max-price" class="salary-input" style="width:100%;" value="950000" step="50000">
+                <input type="number" id="filter-max-price" class="salary-input" style="width:100%;" value="" step="50000" placeholder="Sin tope" autocomplete="off">
               </div>
               <div>
                 <label style="font-size:0.76rem; color:var(--text-secondary); display:block; margin-bottom:0.25rem; font-weight:600;">Tope de Expensas ($ ARS):</label>
-                <input type="number" id="filter-max-expensas" class="salary-input" style="width:100%;" value="180000" step="10000" placeholder="Ej: 180000">
+                <input type="number" id="filter-max-expensas" class="salary-input" style="width:100%;" value="" step="10000" placeholder="Sin tope" autocomplete="off">
               </div>
             </div>
           </div>
@@ -388,7 +388,7 @@
             <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:0.85rem;">
               <div>
                 <label style="font-size:0.76rem; color:var(--text-secondary); display:block; margin-bottom:0.25rem; font-weight:600;">Edificio, PH o Casa:</label>
-                <select id="filter-property-type" class="salary-input" style="width:100%;">
+                <select id="filter-property-type" class="salary-input" style="width:100%;" autocomplete="off">
                   <option value="departamento" selected>Departamento en Edificio</option>
                   <option value="ph">PH (Propiedad Horizontal)</option>
                   <option value="casa">Casa</option>
@@ -400,7 +400,7 @@
               </div>
               <div>
                 <label style="font-size:0.76rem; color:var(--text-secondary); display:block; margin-bottom:0.25rem; font-weight:600;">Disposición (Ubicación):</label>
-                <select id="filter-disposition" class="salary-input" style="width:100%;">
+                <select id="filter-disposition" class="salary-input" style="width:100%;" autocomplete="off">
                   <option value="indistinto" selected>Indistinto</option>
                   <option value="frente">Al Frente</option>
                   <option value="contrafrente">Contrafrente (Pulmón abierto / silencioso)</option>
@@ -410,7 +410,7 @@
               </div>
               <div>
                 <label style="font-size:0.76rem; color:var(--text-secondary); display:block; margin-bottom:0.25rem; font-weight:600;">Orientación Solar:</label>
-                <select id="filter-orientation" class="salary-input" style="width:100%;">
+                <select id="filter-orientation" class="salary-input" style="width:100%;" autocomplete="off">
                   <option value="indistinto" selected>Indistinto</option>
                   <option value="norte">Norte / Noreste (Sol todo el día)</option>
                   <option value="este">Este (Sol de mañana)</option>
@@ -420,7 +420,7 @@
               </div>
               <div>
                 <label style="font-size:0.76rem; color:var(--text-secondary); display:block; margin-bottom:0.25rem; font-weight:600;">Antigüedad / Estado:</label>
-                <select id="filter-antiquity" class="salary-input" style="width:100%;">
+                <select id="filter-antiquity" class="salary-input" style="width:100%;" autocomplete="off">
                   <option value="indistinto" selected>Indistinto</option>
                   <option value="estrenar">A estrenar</option>
                   <option value="pozo">En pozo / En construcción</option>
@@ -440,9 +440,9 @@
             <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(175px, 1fr)); gap:0.85rem;">
               <div>
                 <label style="font-size:0.76rem; color:var(--text-secondary); display:block; margin-bottom:0.25rem; font-weight:600;">Cantidad de Ambientes:</label>
-                <select id="filter-min-rooms" class="salary-input" style="width:100%;">
-                  <option value="1">1 ambiente (Monoambiente)</option>
-                  <option value="2" selected>2 ambientes o más</option>
+                <select id="filter-min-rooms" class="salary-input" style="width:100%;" autocomplete="off">
+                  <option value="1" selected>1 ambiente o más</option>
+                  <option value="2">2 ambientes o más</option>
                   <option value="3">3 ambientes o más</option>
                   <option value="4">4 ambientes o más</option>
                   <option value="5">5 o más ambientes</option>
@@ -450,9 +450,9 @@
               </div>
               <div>
                 <label style="font-size:0.76rem; color:var(--text-secondary); display:block; margin-bottom:0.25rem; font-weight:600;">Dormitorios:</label>
-                <select id="filter-bedrooms" class="salary-input" style="width:100%;">
-                  <option value="0">Monoambiente (Sin dorm. separado)</option>
-                  <option value="1" selected>1 dormitorio o más</option>
+                <select id="filter-bedrooms" class="salary-input" style="width:100%;" autocomplete="off">
+                  <option value="0" selected>Indistinto / Monoambiente</option>
+                  <option value="1">1 dormitorio o más</option>
                   <option value="2">2 dormitorios o más</option>
                   <option value="3">3 dormitorios o más</option>
                   <option value="4">4+ dormitorios</option>
@@ -460,7 +460,7 @@
               </div>
               <div>
                 <label style="font-size:0.76rem; color:var(--text-secondary); display:block; margin-bottom:0.25rem; font-weight:600;">Cantidad de Baños:</label>
-                <select id="filter-bathrooms" class="salary-input" style="width:100%;">
+                <select id="filter-bathrooms" class="salary-input" style="width:100%;" autocomplete="off">
                   <option value="1" selected>1 baño o más</option>
                   <option value="2">2 baños (Principal + Toilette/Suite)</option>
                   <option value="3">3 o más baños</option>
@@ -468,15 +468,15 @@
               </div>
               <div>
                 <label style="font-size:0.76rem; color:var(--text-secondary); display:block; margin-bottom:0.25rem; font-weight:600;">Superficie Cubierta Mín. (m²):</label>
-                <input type="number" id="filter-min-m2-covered" class="salary-input" style="width:100%;" value="42" step="5" placeholder="Ej: 45 m²">
+                <input type="number" id="filter-min-m2-covered" class="salary-input" style="width:100%;" value="" step="5" placeholder="Ej: 45 m²" autocomplete="off">
               </div>
               <div>
                 <label style="font-size:0.76rem; color:var(--text-secondary); display:block; margin-bottom:0.25rem; font-weight:600;">Superficie Total Máx. (m²):</label>
-                <input type="number" id="filter-max-m2-total" class="salary-input" style="width:100%;" value="120" step="10" placeholder="Ej: 120 m²">
+                <input type="number" id="filter-max-m2-total" class="salary-input" style="width:100%;" value="" step="10" placeholder="Sin tope" autocomplete="off">
               </div>
               <div>
                 <label style="font-size:0.76rem; color:var(--text-secondary); display:block; margin-bottom:0.25rem; font-weight:600;">Cochera / Estacionamiento:</label>
-                <select id="filter-garage" class="salary-input" style="width:100%;">
+                <select id="filter-garage" class="salary-input" style="width:100%;" autocomplete="off">
                   <option value="indistinto" selected>Indistinto</option>
                   <option value="si_cubierta">Sí (Cochera fija cubierta)</option>
                   <option value="si_cualquiera">Sí (Cubierta o descubierta)</option>
@@ -492,14 +492,14 @@
               🌿 Comodidades del Departamento / Casa (Exteriores y Distribución)
             </h4>
             <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:0.55rem; font-size:0.8rem; color:#e2e8f0;">
-              <label style="display:flex; align-items:center; gap:0.45rem; cursor:pointer;"><input type="checkbox" class="classic-feature-cb" value="Balcón corrido / aterrazado" checked> <span>Balcón corrido / aterrazado</span></label>
-              <label style="display:flex; align-items:center; gap:0.45rem; cursor:pointer;"><input type="checkbox" class="classic-feature-cb" value="Cocina separada (no integrada)" checked> <span>Cocina separada (no integrada)</span></label>
-              <label style="display:flex; align-items:center; gap:0.45rem; cursor:pointer;"><input type="checkbox" class="classic-feature-cb" value="Lavadero independiente"> <span>Lavadero independiente</span></label>
-              <label style="display:flex; align-items:center; gap:0.45rem; cursor:pointer;"><input type="checkbox" class="classic-feature-cb" value="Patio o terraza propia"> <span>Patio o terraza propia</span></label>
-              <label style="display:flex; align-items:center; gap:0.45rem; cursor:pointer;"><input type="checkbox" class="classic-feature-cb" value="Parrilla propia"> <span>Parrilla propia en balcón/patio</span></label>
-              <label style="display:flex; align-items:center; gap:0.45rem; cursor:pointer;"><input type="checkbox" class="classic-feature-cb" value="Baulera"> <span>Baulera individual</span></label>
-              <label style="display:flex; align-items:center; gap:0.45rem; cursor:pointer;"><input type="checkbox" class="classic-feature-cb" value="Dormitorio en suite / Vestidor"> <span>Dormitorio en suite / Vestidor</span></label>
-              <label style="display:flex; align-items:center; gap:0.45rem; cursor:pointer;"><input type="checkbox" class="classic-feature-cb" value="Losa radiante / Caldera individual"> <span>Losa radiante / Caldera dual</span></label>
+              <label style="display:flex; align-items:center; gap:0.45rem; cursor:pointer;"><input type="checkbox" class="classic-feature-cb" value="Balcón corrido / aterrazado" autocomplete="off"> <span>Balcón corrido / aterrazado</span></label>
+              <label style="display:flex; align-items:center; gap:0.45rem; cursor:pointer;"><input type="checkbox" class="classic-feature-cb" value="Cocina separada (no integrada)" autocomplete="off"> <span>Cocina separada (no integrada)</span></label>
+              <label style="display:flex; align-items:center; gap:0.45rem; cursor:pointer;"><input type="checkbox" class="classic-feature-cb" value="Lavadero independiente" autocomplete="off"> <span>Lavadero independiente</span></label>
+              <label style="display:flex; align-items:center; gap:0.45rem; cursor:pointer;"><input type="checkbox" class="classic-feature-cb" value="Patio o terraza propia" autocomplete="off"> <span>Patio o terraza propia</span></label>
+              <label style="display:flex; align-items:center; gap:0.45rem; cursor:pointer;"><input type="checkbox" class="classic-feature-cb" value="Parrilla propia" autocomplete="off"> <span>Parrilla propia en balcón/patio</span></label>
+              <label style="display:flex; align-items:center; gap:0.45rem; cursor:pointer;"><input type="checkbox" class="classic-feature-cb" value="Baulera" autocomplete="off"> <span>Baulera individual</span></label>
+              <label style="display:flex; align-items:center; gap:0.45rem; cursor:pointer;"><input type="checkbox" class="classic-feature-cb" value="Dormitorio en suite / Vestidor" autocomplete="off"> <span>Dormitorio en suite / Vestidor</span></label>
+              <label style="display:flex; align-items:center; gap:0.45rem; cursor:pointer;"><input type="checkbox" class="classic-feature-cb" value="Losa radiante / Caldera individual" autocomplete="off"> <span>Losa radiante / Caldera dual</span></label>
             </div>
           </div>
 
@@ -510,14 +510,14 @@
                 🏊 Amenities y Servicios del Edificio
               </h4>
               <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; font-size:0.79rem; color:#e2e8f0;">
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-amenity-cb" value="Pileta / Piscina"> <span>🏊 Pileta / Solárium</span></label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-amenity-cb" value="SUM / Quincho"> <span>🎉 SUM / Quincho</span></label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-amenity-cb" value="Gimnasio"> <span>🏋️ Gimnasio</span></label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-amenity-cb" value="Parrilla común"> <span>🔥 Parrilla en edificio</span></label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-amenity-cb" value="Laundry"> <span>🧺 Laundry</span></label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-amenity-cb" value="Seguridad 24hs / Tótem"> <span>🛡️ Seguridad 24hs</span></label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-amenity-cb" value="Bicicletero"> <span>🚲 Bicicletero</span></label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-amenity-cb" value="Grupo electrógeno"> <span>⚡ Grupo electrógeno</span></label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-amenity-cb" value="Pileta / Piscina" autocomplete="off"> <span>🏊 Pileta / Solárium</span></label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-amenity-cb" value="SUM / Quincho" autocomplete="off"> <span>🎉 SUM / Quincho</span></label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-amenity-cb" value="Gimnasio" autocomplete="off"> <span>🏋️ Gimnasio</span></label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-amenity-cb" value="Parrilla común" autocomplete="off"> <span>🔥 Parrilla en edificio</span></label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-amenity-cb" value="Laundry" autocomplete="off"> <span>🧺 Laundry</span></label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-amenity-cb" value="Seguridad 24hs / Tótem" autocomplete="off"> <span>🛡️ Seguridad 24hs</span></label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-amenity-cb" value="Bicicletero" autocomplete="off"> <span>🚲 Bicicletero</span></label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-amenity-cb" value="Grupo electrógeno" autocomplete="off"> <span>⚡ Grupo electrógeno</span></label>
               </div>
             </div>
 
@@ -526,22 +526,22 @@
                 📋 Requisitos y Condiciones Admitidas
               </h4>
               <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; font-size:0.79rem; color:#e2e8f0;">
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-req-cb" value="Apto mascotas" checked> <span>🐾 Apto mascotas</span></label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-req-cb" value="Acepta seguro de caución" checked> <span>📄 Seguro de caución</span></label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-req-cb" value="Dueño directo"> <span>🤝 Dueño directo</span></label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-req-cb" value="Apto profesional"> <span>💼 Apto profesional</span></label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-req-cb" value="Apto crédito hipotecario"> <span>🏦 Apto crédito</span></label>
-                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-req-cb" value="Sin expensas / Bajas expensas"> <span>📉 Bajas expensas</span></label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-req-cb" value="Apto mascotas" autocomplete="off"> <span>🐾 Apto mascotas</span></label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-req-cb" value="Acepta seguro de caución" autocomplete="off"> <span>📄 Seguro de caución</span></label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-req-cb" value="Dueño directo" autocomplete="off"> <span>🤝 Dueño directo</span></label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-req-cb" value="Apto profesional" autocomplete="off"> <span>💼 Apto profesional</span></label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-req-cb" value="Apto crédito hipotecario" autocomplete="off"> <span>🏦 Apto crédito</span></label>
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="checkbox" class="classic-req-cb" value="Sin expensas / Bajas expensas" autocomplete="off"> <span>📉 Bajas expensas</span></label>
               </div>
             </div>
           </div>
 
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; padding-top:1rem; border-top:1px solid var(--card-border);">
-            <button type="button" class="btn-sm btn-secondary" id="btn-switch-to-map-from-filters">
-              🗺️ ← Pasar al Mapa conservando estos filtros
+            <button type="button" class="btn-sm btn-secondary" id="btn-classic-back-home">
+              ← Volver al inicio
             </button>
-            <button class="ready-btn" id="btn-filter-go-results">
-              Aplicar Filtros Clásicos y Ver Desglose + Links →
+            <button class="ready-btn" id="btn-classic-proceed-portales">
+              Continuar a Cargar Sitios de Portales →
             </button>
           </div>
         </div>
@@ -558,7 +558,7 @@
           </p>
         </div>
         <button class="ready-btn" id="btn-editor-search-results">
-          🔍 Buscar inmuebles con este layout →
+          Continuar a Cargar Sitios de Portales →
         </button>
       </div>
 
