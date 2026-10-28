@@ -154,12 +154,165 @@
 
         <div class="portales-footer-bar">
           <button class="btn-sm btn-secondary" id="portales-back-btn">← Volver</button>
-          <button class="ready-btn" id="portals-ready-btn">Listo → Definir zona de búsqueda</button>
+          <button class="ready-btn" id="portals-ready-btn">Listo → Configurar tus Hábitos y Costo de Vida</button>
         </div>
       </div>
     </section>
 
-    <!-- 3. DÓNDE BUSCAR: MAPA INTERACTIVO (SIN PESTAÑAS ARRIBA; BÚSQUEDA CLÁSICA ES LA OPCIÓN B DEL INICIO) -->
+    <!-- 2.5 MINI CONVERSACIÓN ANTES DEL MAPA: CÓMO SE MUEVE, DIETA, COCINA VS DELIVERY, GIMNASIO/HOBBYS, LOCALES QUE FRECUENTA Y PRIORIDAD DE RANKING -->
+    <section class="screen" id="screen-estilo-vida-chat">
+      <div style="max-width: 980px; margin: 1rem auto; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-lg);">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem; margin-bottom:1rem; padding-bottom:0.85rem; border-bottom:1px solid var(--card-border);">
+          <div>
+            <span style="font-size:0.74rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--accent-cyan); font-weight:800;">
+              Paso Previo al Mapa · Mini Conversación de Costo de Vida Real
+            </span>
+            <h2 style="font-size:1.45rem; font-weight:800; color:#fff; margin-top:0.15rem;">
+              💬 Contanos cómo te movés, tu dieta, hobbies y dónde comprás
+            </h2>
+            <p style="font-size:0.83rem; color:var(--text-secondary); margin-top:0.2rem;">
+              Podés responder escribiendo en el mini-chat o tocando las opciones de abajo. Con esto calculamos tu gasto real (actualizado con inflación, nafta y tarifas reales de hoy) y armamos tu <strong>Ranking de Conveniencia</strong> cuando marques zonas en el mapa.
+            </p>
+          </div>
+          <div id="lifestyle-live-econ-badge" style="background:rgba(16,185,129,0.12); border:1px solid #10b981; border-radius:8px; padding:0.45rem 0.75rem; font-size:0.72rem; color:#d1fae5; max-width:300px;">
+            📡 <strong>Datos Reales Hoy:</strong> Conectando con IPC INDEC, surtidores YPF Bs.As. y cuadro tarifario vigente...
+          </div>
+        </div>
+
+        <!-- Hilo de la Mini Conversación -->
+        <div id="lifestyle-mini-chat-thread" style="background:var(--bg-primary); border:1px solid var(--card-border); border-radius:var(--radius-sm); padding:0.9rem; max-height:210px; overflow-y:auto; display:flex; flex-direction:column; gap:0.65rem; margin-bottom:0.85rem;">
+          <div class="chat-msg bot">
+            <div class="avatar">🤖</div>
+            <div class="chat-bubble-content" style="font-size:0.83rem;">
+              ¡Antes de pasar al mapa, ajustemos los números a tu vida real! Contame (escribiendo acá abajo o eligiendo en las tarjetas):<br>
+              1️⃣ <strong>¿Cómo te movés?</strong> (auto/nafta, transporte público SUBE, moto, bici o caminando)<br>
+              2️⃣ <strong>¿Cómo es tu dieta y si cocinás o vivís pidiendo comida?</strong><br>
+              3️⃣ <strong>¿Usás gimnasio, tenés algún hobby fijo y en qué supermercados o tiendas comprás?</strong> (ej: si comprás solo en Día y no en Jumbo/Coto, te calculo con precios de Día)<br>
+              4️⃣ <strong>¿Qué preferís priorizar en el ranking del mapa?</strong> (menos tiempo de viaje, menos gasto o el mejor punto medio para todos los lugares que frecuentás).
+            </div>
+          </div>
+        </div>
+
+        <!-- Input de texto libre para la mini conversación -->
+        <div style="display:flex; gap:0.5rem; margin-bottom:1.15rem;">
+          <input type="text" id="lifestyle-mini-chat-input" class="salary-input" placeholder="Escribí acá (ej: Me muevo en subte y colectivo, cocino en casa, voy al gimnasio, compro solo en Día y verdulería y priorizo gastar menos)..." style="flex:1; font-size:0.82rem; padding:0.55rem 0.75rem;" autocomplete="off">
+          <button type="button" id="lifestyle-mini-chat-send" class="btn-sm btn-primary" style="padding:0.55rem 1rem;">Responder al Bot</button>
+        </div>
+
+        <!-- Selectores interactivos sincronizados con la mini conversación -->
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:0.9rem; margin-bottom:1.1rem;">
+          <!-- 1. Movilidad -->
+          <div style="background:var(--bg-primary); border:1px solid var(--card-border); border-radius:var(--radius-sm); padding:0.85rem;">
+            <label style="font-size:0.78rem; font-weight:800; color:#38bdf8; display:block; margin-bottom:0.4rem;">🚗 1. ¿Cómo te movés habitualmente?</label>
+            <select id="habit-transport-mode" class="salary-input" style="width:100%; font-size:0.8rem;" autocomplete="off">
+              <option value="sube" selected>🚇 Transporte Público (Subte / Colectivo / Tren con SUBE)</option>
+              <option value="auto_nafta">🚗 Auto propio (Cálculo real por litro de Nafta Súper/Premium + patente/peaje)</option>
+              <option value="moto">🛵 Moto propia (Bajo consumo de nafta)</option>
+              <option value="bici_pie">🚲 Bicicleta / Caminando (Gasto casi $0 en transporte)</option>
+              <option value="apps_mix">🚕 Mix Transporte Público + Uber / Cabify frecuente</option>
+            </select>
+          </div>
+
+          <!-- 2. Cocina vs Delivery + Tipo de Dieta -->
+          <div style="background:var(--bg-primary); border:1px solid var(--card-border); border-radius:var(--radius-sm); padding:0.85rem;">
+            <label style="font-size:0.78rem; font-weight:800; color:#38bdf8; display:block; margin-bottom:0.4rem;">🍳 2. ¿Cocinás en casa o pedís comida? + Dieta</label>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.45rem;">
+              <select id="habit-cooking-mode" class="salary-input" style="width:100%; font-size:0.77rem;" autocomplete="off">
+                <option value="cocino" selected>🍳 Cocino casi siempre</option>
+                <option value="mix">🥡 Mitad cocino / mitad pido</option>
+                <option value="delivery">🛵 Pido comida / delivery casi todos los días</option>
+              </select>
+              <select id="habit-diet-type" class="salary-input" style="width:100%; font-size:0.77rem;" autocomplete="off">
+                <option value="omnivora" selected>🥩 Dieta estándar variada</option>
+                <option value="economica">🍲 Económica / Mayorista</option>
+                <option value="saludable">🥗 Veggie / Saludable / Dietética</option>
+                <option value="proteica">💪 Deportiva / Alta en proteínas</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 3. Gimnasio, Deportes y Hobbies -->
+          <div style="background:var(--bg-primary); border:1px solid var(--card-border); border-radius:var(--radius-sm); padding:0.85rem;">
+            <label style="font-size:0.78rem; font-weight:800; color:#38bdf8; display:block; margin-bottom:0.4rem;">🏋️ 3. ¿Usás gimnasio o tenés hobbies fijos?</label>
+            <div style="display:flex; flex-wrap:wrap; gap:0.5rem; font-size:0.77rem; color:#e2e8f0;">
+              <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;"><input type="checkbox" class="habit-hobby-cb" value="gimnasio" autocomplete="off"> <span>🏋️ Gimnasio / Crossfit</span></label>
+              <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;"><input type="checkbox" class="habit-hobby-cb" value="club_deporte" autocomplete="off"> <span>⚽ Club / Fútbol / Tenis / Natación</span></label>
+              <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;"><input type="checkbox" class="habit-hobby-cb" value="salidas_cafe" autocomplete="off"> <span>☕ Cafeterías / Bares / Cine</span></label>
+              <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;"><input type="checkbox" class="habit-hobby-cb" value="cursos_arte" autocomplete="off"> <span>🎨 Clases / Idiomas / Música</span></label>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Cadenas de Supermercados y Tiendas que el usuario usa (Ej: si desmarca Jumbo y Coto y deja solo Día, recalcula a precios de Día) -->
+        <div style="background:var(--bg-primary); border:1px solid var(--card-border); border-radius:var(--radius-sm); padding:0.9rem; margin-bottom:1.1rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.45rem;">
+            <label style="font-size:0.8rem; font-weight:800; color:#34d399;">
+              🛒 4. ¿En qué supermercados y comercios comprás? (Modifica directamente tus costos reales)
+            </label>
+            <span style="font-size:0.71rem; color:var(--text-secondary);">Si marcás solo <strong>Día</strong> o <strong>Mayorista</strong> y quitás <strong>Jumbo/Coto</strong>, el promedio baja a los precios de las cadenas elegidas.</span>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(195px, 1fr)); gap:0.5rem; font-size:0.78rem; color:#e2e8f0;">
+            <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer; background:rgba(15,23,42,0.65); padding:0.4rem 0.6rem; border-radius:6px; border:1px solid var(--card-border);">
+              <input type="checkbox" class="habit-supermarket-cb" value="dia" checked autocomplete="off">
+              <span>🔴 <strong>Supermercados Día</strong> (-18% marca propia/ahorro)</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer; background:rgba(15,23,42,0.65); padding:0.4rem 0.6rem; border-radius:6px; border:1px solid var(--card-border);">
+              <input type="checkbox" class="habit-supermarket-cb" value="coto" checked autocomplete="off">
+              <span>🥩 <strong>Coto</strong> (Precio base / ofertas carnes)</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer; background:rgba(15,23,42,0.65); padding:0.4rem 0.6rem; border-radius:6px; border:1px solid var(--card-border);">
+              <input type="checkbox" class="habit-supermarket-cb" value="carrefour" checked autocomplete="off">
+              <span>🔵 <strong>Carrefour / Vea / Changomás</strong> (Promedio)</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer; background:rgba(15,23,42,0.65); padding:0.4rem 0.6rem; border-radius:6px; border:1px solid var(--card-border);">
+              <input type="checkbox" class="habit-supermarket-cb" value="jumbo" autocomplete="off">
+              <span>🟢 <strong>Jumbo / Disco</strong> (+16% línea premium)</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer; background:rgba(15,23,42,0.65); padding:0.4rem 0.6rem; border-radius:6px; border:1px solid var(--card-border);">
+              <input type="checkbox" class="habit-supermarket-cb" value="mayorista" autocomplete="off">
+              <span>📦 <strong>Mayoristas (Vital/Diarco/Maxi)</strong> (-24%)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 5. Prioridad para el Ranking de Conveniencia en el Mapa -->
+        <div style="background:rgba(56,189,248,0.08); border:1px solid #38bdf8; border-radius:var(--radius-sm); padding:0.9rem; margin-bottom:1.15rem;">
+          <label style="font-size:0.82rem; font-weight:800; color:#bae6fd; display:block; margin-bottom:0.5rem;">
+            🏆 5. ¿Qué preferís priorizar cuando armemos tu Ranking de Conveniencia en el Mapa?
+          </label>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:0.6rem; font-size:0.79rem;">
+            <label style="display:flex; align-items:flex-start; gap:0.45rem; cursor:pointer; background:var(--bg-primary); padding:0.6rem; border-radius:6px; border:1px solid var(--card-border);">
+              <input type="radio" name="habit-priority-ranking" value="equilibrio_frecuentes" checked autocomplete="off" style="margin-top:3px;">
+              <div>
+                <strong style="color:#fff; display:block;">🎯 Mejor lugar para todos los sitios que frecuento</strong>
+                <span style="font-size:0.71rem; color:var(--text-secondary);">Equilibra cercanía a todos tus puntos, locales que usás y costo mensual.</span>
+              </div>
+            </label>
+            <label style="display:flex; align-items:flex-start; gap:0.45rem; cursor:pointer; background:var(--bg-primary); padding:0.6rem; border-radius:6px; border:1px solid var(--card-border);">
+              <input type="radio" name="habit-priority-ranking" value="menos_gasto" autocomplete="off" style="margin-top:3px;">
+              <div>
+                <strong style="color:#fff; display:block;">💰 Menos gasto mensual total</strong>
+                <span style="font-size:0.71rem; color:var(--text-secondary);">Prioriza donde el alquiler + impuestos + tus comercios sean más económicos.</span>
+              </div>
+            </label>
+            <label style="display:flex; align-items:flex-start; gap:0.45rem; cursor:pointer; background:var(--bg-primary); padding:0.6rem; border-radius:6px; border:1px solid var(--card-border);">
+              <input type="radio" name="habit-priority-ranking" value="menos_viaje" autocomplete="off" style="margin-top:3px;">
+              <div>
+                <strong style="color:#fff; display:block;">⏱️ Menos tiempo en viaje</strong>
+                <span style="font-size:0.71rem; color:var(--text-secondary);">Prioriza el menor tiempo de traslado en tu medio de transporte hacia tus puntos.</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+          <button type="button" class="btn-sm btn-secondary" id="lifestyle-back-portales-btn">← Volver a Portales</button>
+          <button type="button" class="ready-btn" id="lifestyle-proceed-map-btn">Ir al Mapa Limpio de Buenos Aires →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. DÓNDE BUSCAR: MAPA INTERACTIVO LIMPIO (EL USUARIO ELIGE O DIBUJA LAS ZONAS EN CUALQUIER PARTE DE BUENOS AIRES) -->
     <section class="screen" id="screen-metodo">
       <div id="tab-content-mapa">
         <div class="map-page-layout">
@@ -172,8 +325,14 @@
                 <button type="button" class="btn-link-mini" id="open-cost-bot-btn" title="Ver fórmula de los cálculos">📊 Fórmula</button>
               </div>
               <p class="sidebar-speech-msg">
-                Poné tu sueldo para que te marquemos con colores dónde te conviene vivir. Pasá el mouse por encima de cualquier zona para ver la info rápida o hacé click para abrir el desglose completo.
+                Poné tu sueldo y agregá o dibujá solo las zonas que te interesen de todo Buenos Aires. Pasá el mouse por encima para ver el <strong>Costo Total</strong> rápido o hacé click para expandir la deconstrucción.
               </p>
+
+              <!-- Estado financiero real al día (IPC INDEC, Nafta real, SUBE) -->
+              <div id="map-live-econ-indicator" style="background:rgba(15,23,42,0.75); border:1px solid rgba(52,211,153,0.4); border-radius:6px; padding:0.4rem 0.55rem; margin-bottom:0.55rem; font-size:0.69rem; color:#d1fae5; display:flex; justify-content:space-between; align-items:center; gap:0.35rem;">
+                <span id="map-live-econ-text">📡 IPC INDEC / Nafta YPF / Tarifas hoy al día</span>
+                <button type="button" id="btn-refresh-live-econ" class="btn-link-mini" style="font-size:0.66rem; padding:1px 5px;" title="Consultar última actualización de inflación, nafta y comercios">🔄 Al día</button>
+              </div>
 
               <div style="margin-bottom:0.55rem;">
                 <label style="font-size:0.74rem; color:#bae6fd; font-weight:700; display:block; margin-bottom:0.2rem;">💵 Tu Sueldo Mensual (ARS):</label>
@@ -198,7 +357,7 @@
               </div>
 
               <button class="btn-sm btn-primary" id="apply-salary-btn" style="width:100%; margin-bottom:0.45rem;">
-                🎨 Actualizar Colores del Mapa
+                🎨 Actualizar Colores y Ranking
               </button>
 
               <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.72rem; color:#e2e8f0; cursor:pointer; background:rgba(15,23,42,0.55); padding:0.35rem 0.5rem; border-radius:4px;">
@@ -207,32 +366,31 @@
               </label>
             </div>
 
-            <!-- AÑADIR ZONA MENCIONÁNDOLA (EXTENDIDO A TODA CABA Y GRAN BUENOS AIRES / PBA) -->
+            <!-- ELEGIR Y SUMAR ZONAS AL MAPA (EL MAPA EMPIEZA 100% LIMPIO; EL USUARIO ELIGE CUALQUIER BARRIO, PARTIDO O CIUDAD DE TODO BUENOS AIRES) -->
             <div style="background:rgba(15,23,42,0.55); border:1px solid var(--card-border); border-radius:var(--radius-sm); padding:0.7rem;">
-              <h4 style="font-size: 0.8rem; text-transform: uppercase; color: var(--accent-cyan); margin-bottom: 0.3rem; font-weight:800;">
-                🏙️ Mencionar Barrio o Localidad (Todo Buenos Aires)
-              </h4>
-              <p style="font-size: 0.72rem; color: var(--text-secondary); margin-bottom: 0.45rem; line-height:1.35;">
-                Escribí o elegí cualquier barrio de <strong>Capital Federal</strong> o localidad de <strong>Zona Norte, Oeste, Sur y La Plata</strong> para ver sus sub-zonas internas según cambia el alquiler:
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.25rem;">
+                <h4 style="font-size: 0.78rem; text-transform: uppercase; color: var(--accent-cyan); font-weight:800;">
+                  🏙️ Añadir Zona por Nombre (Todo Bs.As.)
+                </h4>
+                <button type="button" id="btn-clear-all-map-zones" class="btn-link-mini" style="font-size:0.66rem; color:#fca5a5;" title="Quitar todas las zonas del mapa">🗑️ Limpiar mapa</button>
+              </div>
+              <p style="font-size: 0.71rem; color: var(--text-secondary); margin-bottom: 0.45rem; line-height:1.35;">
+                El mapa arranca limpio sin zonas impuestas. Escribí cualquier <strong>barrio de CABA</strong> o <strong>partido / ciudad de toda la Provincia de Buenos Aires</strong> para sumar sus sub-zonas internas:
               </p>
-              <div style="display:flex; gap:0.35rem; margin-bottom:0.45rem;">
-                <input type="text" id="neighborhood-mention-input" class="salary-input" placeholder="Ej: Caballito, Olivos, San Isidro, Morón, Ramos Mejía, Lanús, Quilmes, La Plata..." style="flex:1; font-size:0.74rem; padding:0.35rem 0.55rem;" autocomplete="off">
-                <button type="button" id="btn-mention-neighborhood" class="btn-sm btn-primary" style="padding:0.35rem 0.65rem; font-size:0.75rem;">Ver</button>
+              <div style="display:flex; gap:0.35rem; margin-bottom:0.4rem;">
+                <input type="text" id="neighborhood-mention-input" list="buenos-aires-all-zones-datalist" class="salary-input" placeholder="Ej: Caballito, Lanús, Pilar, Luján, Mar del Plata, Tandil, Bahía Blanca..." style="flex:1; font-size:0.74rem; padding:0.35rem 0.55rem;" autocomplete="off">
+                <button type="button" id="btn-mention-neighborhood" class="btn-sm btn-primary" style="padding:0.35rem 0.65rem; font-size:0.75rem;">+ Sumar</button>
               </div>
-              <div style="display:flex; flex-wrap:wrap; gap:0.28rem; margin-bottom:0.45rem;">
-                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="caba" style="font-size:0.66rem; padding:0.16rem 0.42rem;">CABA</button>
-                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="zona-norte" style="font-size:0.66rem; padding:0.16rem 0.42rem;">GBA Norte</button>
-                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="zona-oeste" style="font-size:0.66rem; padding:0.16rem 0.42rem;">GBA Oeste</button>
-                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="zona-sur" style="font-size:0.66rem; padding:0.16rem 0.42rem;">GBA Sur</button>
-                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="la-plata" style="font-size:0.66rem; padding:0.16rem 0.42rem;">La Plata</button>
-                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="almagro" style="font-size:0.66rem; padding:0.16rem 0.42rem;">Almagro</button>
-                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="caballito" style="font-size:0.66rem; padding:0.16rem 0.42rem;">Caballito</button>
-                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="palermo" style="font-size:0.66rem; padding:0.16rem 0.42rem;">Palermo</button>
-                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="belgrano" style="font-size:0.66rem; padding:0.16rem 0.42rem;">Belgrano</button>
-                <button type="button" class="btn-sm btn-secondary barrio-quick-chip" data-barrio="todos" style="font-size:0.66rem; padding:0.16rem 0.42rem; color:#38bdf8;">Todo Bs.As.</button>
-              </div>
-              <!-- Desglose de las divisiones internas del barrio mencionado -->
-              <div id="neighborhood-internal-subzones-box" style="display:none; flex-direction:column; gap:0.35rem; margin-top:0.35rem; padding-top:0.45rem; border-top:1px dashed var(--card-border);"></div>
+              <datalist id="buenos-aires-all-zones-datalist">
+                <!-- Se puebla dinámicamente con los 48 barrios de CABA y los 135 municipios/ciudades de Provincia de Buenos Aires -->
+              </datalist>
+              <!-- Desglose de las divisiones internas de las zonas que el usuario eligió -->
+              <div id="neighborhood-internal-subzones-box" style="display:none; flex-direction:column; gap:0.35rem; margin-top:0.35rem; padding-top:0.45rem; border-top:1px dashed var(--card-border); max-height:210px; overflow-y:auto;"></div>
+            </div>
+
+            <!-- RANKING DE CONVENIENCIA PERSONALIZADO (SEGÚN VIAJE, GASTO O LUGARES FRECUENTADOS) -->
+            <div id="map-convenience-ranking-box" style="display:none; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.45); border-radius:var(--radius-sm); padding:0.7rem;">
+              <!-- Se actualiza en vivo cuando el usuario suma o dibuja zonas -->
             </div>
 
             <!-- DELIMITAR LÍMITES CALLE POR CALLE -->
