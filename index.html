@@ -159,7 +159,7 @@
       </div>
     </section>
 
-    <!-- 2.5 MINI CONVERSACIÓN ANTES DEL MAPA: CÓMO SE MUEVE, DIETA, COCINA VS DELIVERY, GIMNASIO/HOBBYS, LOCALES QUE FRECUENTA Y PRIORIDAD DE RANKING -->
+    <!-- 2.5 MINI CONVERSACIÓN ANTES DEL MAPA: CÓMO SE MUEVE, DIETA, COCINA VS DELIVERY, GIMNASIO/HOBBYS, COLEGIOS/HOSPITALES/PREPAGAS/INSTITUCIONES, LOCALES QUE FRECUENTA Y CONVENIENCIA DE CONCENTRACIÓN DE SERVICIOS -->
     <section class="screen" id="screen-estilo-vida-chat">
       <div style="max-width: 980px; margin: 1rem auto; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--radius-md); padding: 1.5rem; box-shadow: var(--shadow-lg);">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem; margin-bottom:1rem; padding-bottom:0.85rem; border-bottom:1px solid var(--card-border);">
@@ -168,18 +168,18 @@
               Paso Previo al Mapa · Mini Conversación de Costo de Vida Real
             </span>
             <h2 style="font-size:1.45rem; font-weight:800; color:#fff; margin-top:0.15rem;">
-              💬 Contanos cómo te movés, tu dieta, hobbies y dónde comprás
+              💬 Contanos cómo te movés, tu hogar, salud/educación y dónde comprás
             </h2>
             <p style="font-size:0.83rem; color:var(--text-secondary); margin-top:0.2rem;">
-              Podés responder escribiendo en el mini-chat o tocando las opciones de abajo. Con esto calculamos tu gasto real (actualizado con inflación, nafta y tarifas reales de hoy) y armamos tu <strong>Ranking de Conveniencia</strong> cuando marques zonas en el mapa.
+              Podés responder escribiendo en el mini-chat o tocando las opciones de abajo. Con esto calculamos tu gasto real (actualizado por mes con APIs oficiales: IPC/INDEC, Secretaría de Energía, Banco Nación y RED SUBE, leíble y modificable en <code>datos_economicos_oficiales.txt</code>) y evaluamos tu <strong>Conveniencia de concentración de servicios</strong> cuando marques zonas en el mapa.
             </p>
           </div>
           <div style="display:flex; flex-direction:column; gap:0.4rem; align-items:flex-end;">
-            <div id="lifestyle-live-econ-badge" style="background:rgba(16,185,129,0.12); border:1px solid #10b981; border-radius:8px; padding:0.45rem 0.75rem; font-size:0.72rem; color:#d1fae5; max-width:320px;">
-              📡 <strong id="live-inflation-badge">Datos Reales Hoy: Conectando con IPC INDEC, surtidores YPF Bs.As. y cuadro tarifario...</strong>
+            <div id="lifestyle-live-econ-badge" style="background:rgba(16,185,129,0.12); border:1px solid #10b981; border-radius:8px; padding:0.45rem 0.75rem; font-size:0.72rem; color:#d1fae5; max-width:340px;">
+              📡 <strong id="live-inflation-badge">APIs Oficiales (Mensual + .txt): IPC/INDEC, Sec. Energía (Nafta), BNA (Dólar Vendedor) y RED SUBE...</strong>
             </div>
             <button type="button" id="btn-open-zonal-db-from-chat" class="btn-sm btn-secondary" style="font-size:0.72rem; border-color:#38bdf8; color:#bae6fd; padding:0.3rem 0.65rem;">
-              🗄️ Ver Base de Datos (Precios, Subtes, Cortes) / ⚠️ Avisar Dato Obsoleto
+              📄 Leer/Editar archivo .txt Oficial y Base de Datos Zonal
             </button>
           </div>
         </div>
@@ -190,10 +190,10 @@
             <div class="avatar">🤖</div>
             <div class="chat-bubble-content" style="font-size:0.83rem;">
               ¡Antes de pasar al mapa, ajustemos los números a tu vida real! Contame (escribiendo acá abajo o eligiendo en las tarjetas):<br>
-              1️⃣ <strong>¿Cómo te movés?</strong> (auto/nafta, transporte público SUBE, moto, bici o caminando)<br>
-              2️⃣ <strong>¿Cómo es tu dieta y si cocinás o vivís pidiendo comida?</strong><br>
-              3️⃣ <strong>¿Usás gimnasio, tenés algún hobby fijo y en qué supermercados o tiendas comprás?</strong> (ej: si comprás solo en Día y no en Jumbo/Coto, te calculo con precios de Día)<br>
-              4️⃣ <strong>¿Qué preferís priorizar en el ranking del mapa?</strong> (menos tiempo de viaje, menos gasto o el mejor punto medio para todos los lugares que frecuentás).
+              1️⃣ <strong>¿Cómo te movés?</strong> (auto/nafta, transporte público RED SUBE, moto, bici o caminando)<br>
+              2️⃣ <strong>¿Cuántos habitantes son en el hogar, cómo es su dieta y si cocinan o piden comida?</strong><br>
+              3️⃣ <strong>¿Necesitan colegios (niños/adultos), hospitales, prepagas, instituciones o gimnasio/hobbies?</strong><br>
+              4️⃣ <strong>¿Qué preferís priorizar en la Conveniencia de concentración de servicios del mapa?</strong> (menos tiempo de viaje, menos gasto o el mejor punto medio para todos los lugares que frecuentás).
             </div>
           </div>
         </div>
@@ -308,10 +308,132 @@
           </div>
         </div>
 
-        <!-- 5. Prioridad para el Ranking de Conveniencia en el Mapa -->
+        <!-- 5. Integrantes del Hogar + Selección Múltiple para Colegios (Niños/Adultos), Hospitales, Prepagas e Instituciones -->
+        <div style="background:var(--bg-primary); border:1px solid var(--card-border); border-radius:var(--radius-sm); padding:0.95rem; margin-bottom:1.1rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.6rem; margin-bottom:0.65rem; padding-bottom:0.5rem; border-bottom:1px solid var(--card-border);">
+            <div>
+              <label style="font-size:0.82rem; font-weight:800; color:#38bdf8; display:block;">
+                👨‍👩‍👧‍👦 5. Hogar con Varios Habitantes, Colegios (Niños/Adultos), Hospitales, Prepagas e Instituciones
+              </label>
+              <span style="font-size:0.71rem; color:var(--text-secondary);">
+                Seleccioná todos los servicios e instituciones que utilice tu hogar; el costo mensual y la <strong>Conveniencia de concentración de servicios</strong> se adaptan a la cantidad de integrantes.
+              </span>
+            </div>
+            <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+              <label style="font-size:0.74rem; color:#bae6fd; font-weight:700; display:flex; align-items:center; gap:0.3rem;">
+                👥 Habitantes del hogar:
+                <select id="habit-household-members" class="salary-input" style="width:auto; font-size:0.76rem; padding:0.25rem 0.5rem; font-weight:800; color:#fff;" autocomplete="off">
+                  <option value="1" selected>1 habitante (Individual)</option>
+                  <option value="2">2 habitantes (Pareja / 2 adultos)</option>
+                  <option value="3">3 habitantes (Hogar 3 pers.)</option>
+                  <option value="4">4 habitantes (Familia 4 pers.)</option>
+                  <option value="5">5 habitantes (Familia 5 pers.)</option>
+                  <option value="6">6+ habitantes (Familia numerosa)</option>
+                </select>
+              </label>
+              <label style="font-size:0.74rem; color:#bae6fd; font-weight:700; display:flex; align-items:center; gap:0.3rem;">
+                🎒 En edad escolar/estudio:
+                <select id="habit-household-students" class="salary-input" style="width:auto; font-size:0.76rem; padding:0.25rem 0.5rem; font-weight:800; color:#fff;" autocomplete="off">
+                  <option value="0" selected>0</option>
+                  <option value="1">1 estudiante</option>
+                  <option value="2">2 estudiantes</option>
+                  <option value="3">3 estudiantes</option>
+                  <option value="4">4+ estudiantes</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:0.75rem; font-size:0.76rem; color:#e2e8f0;">
+            <!-- Colegios (Niños y Adultos) -->
+            <div style="background:rgba(15,23,42,0.65); border:1px solid var(--card-border); border-radius:6px; padding:0.6rem;">
+              <div style="font-weight:800; color:#38bdf8; margin-bottom:0.35rem; font-size:0.75rem;">🎓 Colegios y Educación (Niños/Adultos)</div>
+              <div style="display:flex; flex-direction:column; gap:0.32rem;">
+                <label style="display:flex; align-items:flex-start; gap:0.35rem; cursor:pointer;">
+                  <input type="checkbox" class="habit-institution-cb" value="colegio_ninos_publico" autocomplete="off" style="margin-top:2px;">
+                  <span>🏫 Colegio Estatal / Público (Niños/Adolesc. · materiales y coop.)</span>
+                </label>
+                <label style="display:flex; align-items:flex-start; gap:0.35rem; cursor:pointer;">
+                  <input type="checkbox" class="habit-institution-cb" value="colegio_ninos_privado" autocomplete="off" style="margin-top:2px;">
+                  <span>🎒 Colegio Privado / Parroquial / Bilingüe (Niños/Adolesc.)</span>
+                </label>
+                <label style="display:flex; align-items:flex-start; gap:0.35rem; cursor:pointer;">
+                  <input type="checkbox" class="habit-institution-cb" value="jardin_maternal" autocomplete="off" style="margin-top:2px;">
+                  <span>🧸 Jardín Maternal / Guardería Infantil</span>
+                </label>
+                <label style="display:flex; align-items:flex-start; gap:0.35rem; cursor:pointer;">
+                  <input type="checkbox" class="habit-institution-cb" value="educacion_adultos" autocomplete="off" style="margin-top:2px;">
+                  <span>🎓 Educación Adultos / Universidad / Terciario / Nocturno</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Hospitales y Centros Médicos -->
+            <div style="background:rgba(15,23,42,0.65); border:1px solid var(--card-border); border-radius:6px; padding:0.6rem;">
+              <div style="font-weight:800; color:#34d399; margin-bottom:0.35rem; font-size:0.75rem;">🏥 Hospitales y Centros de Salud</div>
+              <div style="display:flex; flex-direction:column; gap:0.32rem;">
+                <label style="display:flex; align-items:flex-start; gap:0.35rem; cursor:pointer;">
+                  <input type="checkbox" class="habit-institution-cb" value="hospital_publico" autocomplete="off" style="margin-top:2px;">
+                  <span>🏥 Hospital Público / Guardia de Alta Complejidad</span>
+                </label>
+                <label style="display:flex; align-items:flex-start; gap:0.35rem; cursor:pointer;">
+                  <input type="checkbox" class="habit-institution-cb" value="clinica_sanatorio" autocomplete="off" style="margin-top:2px;">
+                  <span>🩺 Sanatorio / Clínica Privada / Consultorios Externos</span>
+                </label>
+                <label style="display:flex; align-items:flex-start; gap:0.35rem; cursor:pointer;">
+                  <input type="checkbox" class="habit-institution-cb" value="guardia_pediatrica" autocomplete="off" style="margin-top:2px;">
+                  <span>👶 Hospital / Guardia Pediátrica u Odontológica</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Prepagas y Cobertura Médica -->
+            <div style="background:rgba(15,23,42,0.65); border:1px solid var(--card-border); border-radius:6px; padding:0.6rem;">
+              <div style="font-weight:800; color:#f59e0b; margin-bottom:0.35rem; font-size:0.75rem;">💳 Prepagas y Cobertura Médica</div>
+              <div style="display:flex; flex-direction:column; gap:0.32rem;">
+                <label style="display:flex; align-items:flex-start; gap:0.35rem; cursor:pointer;">
+                  <input type="checkbox" class="habit-institution-cb" value="prepaga_estandar" autocomplete="off" style="margin-top:2px;">
+                  <span>💳 Medicina Prepaga Plan Estándar / Intermedio (escala por hab.)</span>
+                </label>
+                <label style="display:flex; align-items:flex-start; gap:0.35rem; cursor:pointer;">
+                  <input type="checkbox" class="habit-institution-cb" value="prepaga_premium" autocomplete="off" style="margin-top:2px;">
+                  <span>🌟 Medicina Prepaga Plan Superior / Familiar</span>
+                </label>
+                <label style="display:flex; align-items:flex-start; gap:0.35rem; cursor:pointer;">
+                  <input type="checkbox" class="habit-institution-cb" value="obra_social_copagos" autocomplete="off" style="margin-top:2px;">
+                  <span>📋 Obra Social Sindical / Monotributo (copagos y farmacia)</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Instituciones y Servicios Barriales -->
+            <div style="background:rgba(15,23,42,0.65); border:1px solid var(--card-border); border-radius:6px; padding:0.6rem;">
+              <div style="font-weight:800; color:#c084fc; margin-bottom:0.35rem; font-size:0.75rem;">🏛️ Instituciones y Entidades</div>
+              <div style="display:flex; flex-direction:column; gap:0.32rem;">
+                <label style="display:flex; align-items:flex-start; gap:0.35rem; cursor:pointer;">
+                  <input type="checkbox" class="habit-institution-cb" value="inst_club_social" autocomplete="off" style="margin-top:2px;">
+                  <span>🏛️ Club Social y Deportivo / Polideportivo Familiar</span>
+                </label>
+                <label style="display:flex; align-items:flex-start; gap:0.35rem; cursor:pointer;">
+                  <input type="checkbox" class="habit-institution-cb" value="inst_cultural_biblioteca" autocomplete="off" style="margin-top:2px;">
+                  <span>📚 Centro Cultural / Biblioteca / Instituto de Idiomas</span>
+                </label>
+                <label style="display:flex; align-items:flex-start; gap:0.35rem; cursor:pointer;">
+                  <input type="checkbox" class="habit-institution-cb" value="inst_bancaria_admin" autocomplete="off" style="margin-top:2px;">
+                  <span>🏦 Polo Bancario / Sede Municipal / Centro Cívico</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div id="habit-household-summary-badge" style="margin-top:0.55rem; font-size:0.72rem; color:#a7f3d0; font-weight:700;">
+            👥 Hogar configurado: 1 habitante · Sin instituciones adicionales seleccionadas.
+          </div>
+        </div>
+
+        <!-- 6. Prioridad para la Conveniencia de concentración de servicios en el Mapa -->
         <div style="background:rgba(56,189,248,0.08); border:1px solid #38bdf8; border-radius:var(--radius-sm); padding:0.9rem; margin-bottom:1.15rem;">
           <label style="font-size:0.82rem; font-weight:800; color:#bae6fd; display:block; margin-bottom:0.5rem;">
-            🏆 5. ¿Qué preferís priorizar cuando armemos tu Ranking de Conveniencia en el Mapa?
+            🏆 6. ¿Qué preferís priorizar cuando calculemos tu Conveniencia de concentración de servicios en el Mapa?
           </label>
           <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:0.6rem; font-size:0.79rem;">
             <label style="display:flex; align-items:flex-start; gap:0.45rem; cursor:pointer; background:var(--bg-primary); padding:0.6rem; border-radius:6px; border:1px solid var(--card-border);">
@@ -358,7 +480,7 @@
                 <button type="button" class="btn-link-mini" id="open-cost-bot-btn" title="Ver fórmula de los cálculos">📊 Fórmula</button>
               </div>
               <p class="sidebar-speech-msg">
-                Poné tu sueldo y agregá o dibujá solo las zonas que te interesen de todo Buenos Aires. Pasá el mouse por encima para ver el <strong>Costo Total</strong> rápido o hacé click para expandir la deconstrucción.
+                Ingresá tu sueldo y tope de presupuesto: los colores y el ranking se actualizan en tiempo real. Hacé <strong>click directo</strong> sobre cualquier zona marcada en el mapa para abrir su desglose.
               </p>
 
               <!-- Estado financiero real al día (IPC INDEC, Nafta real, SUBE) + Acceso a Base de Datos Propia -->
@@ -371,14 +493,14 @@
               </button>
 
               <div style="margin-bottom:0.55rem;">
-                <label style="font-size:0.74rem; color:#bae6fd; font-weight:700; display:block; margin-bottom:0.2rem;">💵 Tu Sueldo Mensual (ARS):</label>
+                <label style="font-size:0.74rem; color:#bae6fd; font-weight:700; display:block; margin-bottom:0.2rem;">💵 Tu Sueldo Mensual (actualización en tiempo real):</label>
                 <div class="salary-input-wrapper" style="width:100%;">
                   <span class="currency-symbol">$</span>
                   <input type="text" inputmode="numeric" id="global-salary-input" class="salary-input formatted-thousands-input" style="width:100%;" value="" placeholder="Ingresá tu sueldo (ej: 1.500.000)" autocomplete="off">
                 </div>
               </div>
 
-              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem; margin-bottom:0.55rem;">
+              <div style="display:grid; grid-template-columns: 0.9fr 1.3fr; gap:0.5rem;">
                 <div>
                   <label style="font-size:0.72rem; color:var(--text-secondary); display:block; margin-bottom:0.2rem;">Operación:</label>
                   <select id="map-filter-operation" class="salary-input" style="width:100%; font-size:0.78rem; padding:0.3rem 0.45rem;" autocomplete="off">
@@ -387,56 +509,56 @@
                   </select>
                 </div>
                 <div>
-                  <label style="font-size:0.72rem; color:var(--text-secondary); display:block; margin-bottom:0.2rem;">Tope Presupuesto:</label>
-                  <input type="text" inputmode="numeric" id="map-filter-max-price" class="salary-input formatted-thousands-input" style="width:100%; font-size:0.78rem; padding:0.3rem 0.45rem;" value="" placeholder="Ej: 650.000" autocomplete="off">
+                  <label style="font-size:0.72rem; color:var(--text-secondary); display:block; margin-bottom:0.2rem;">Tope Presupuesto + Moneda:</label>
+                  <div style="display:flex; gap:0.3rem; align-items:center;">
+                    <input type="text" inputmode="numeric" id="map-filter-max-price" class="salary-input formatted-thousands-input" style="flex:1; min-width:0; font-size:0.78rem; padding:0.3rem 0.45rem;" value="" placeholder="Ej: 650.000" autocomplete="off">
+                    <select id="map-filter-currency" class="salary-input" style="width:66px; font-size:0.75rem; font-weight:800; padding:0.3rem 0.25rem; color:#38bdf8; border-color:#38bdf8;" title="Moneda del tope de presupuesto (ARS / USD)" autocomplete="off">
+                      <option value="ARS" selected>ARS</option>
+                      <option value="USD">USD</option>
+                    </select>
+                  </div>
                 </div>
               </div>
-
-              <button class="btn-sm btn-primary" id="apply-salary-btn" style="width:100%; margin-bottom:0.45rem;">
-                🎨 Actualizar Colores y Ranking
-              </button>
-
-              <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.72rem; color:#e2e8f0; cursor:pointer; background:rgba(15,23,42,0.55); padding:0.35rem 0.5rem; border-radius:4px;">
-                <input type="checkbox" id="hover-auto-navigate-toggle" autocomplete="off">
-                <span>Saltar al detalle automáticamente al dejar el mouse quieto</span>
-              </label>
             </div>
 
-            <!-- ELEGIR Y SUMAR ZONAS AL MAPA (EL MAPA EMPIEZA 100% LIMPIO; EL USUARIO ELIGE CUALQUIER BARRIO, PARTIDO O CIUDAD DE TODO BUENOS AIRES) -->
-            <div style="background:rgba(15,23,42,0.55); border:1px solid var(--card-border); border-radius:var(--radius-sm); padding:0.7rem;">
+            <!-- ELEGIR Y SUMAR ZONAS AL MAPA (EL MAPA EMPIEZA 100% LIMPIO; EL USUARIO ELIGE CUALQUIER BARRIO, PARTIDO O CIUDAD) -->
+            <div style="background:rgba(15,23,42,0.55); border:1px solid var(--card-border); border-radius:var(--radius-sm); padding:0.7rem; flex-shrink:0;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.25rem;">
                 <h4 style="font-size: 0.78rem; text-transform: uppercase; color: var(--accent-cyan); font-weight:800;">
-                  🏙️ Añadir Zona por Nombre (Todo Bs.As.)
+                  🏙️ Añadir Zona por Nombre
                 </h4>
                 <button type="button" id="btn-clear-all-map-zones" class="btn-link-mini" style="font-size:0.66rem; color:#fca5a5;" title="Quitar todas las zonas del mapa">🗑️ Limpiar mapa</button>
               </div>
               <p style="font-size: 0.71rem; color: var(--text-secondary); margin-bottom: 0.45rem; line-height:1.35;">
-                El mapa arranca limpio sin zonas impuestas. Escribí cualquier <strong>barrio de CABA</strong> o <strong>cualquier ciudad / partido de toda la Provincia de Buenos Aires</strong> (ej: Miramar, Tandil, Mar del Plata, La Plata, Pilar, Lanús, Caballito):
+                Cada búsqueda aísla exactamente el barrio o localidad ingresada (sin agrupamientos arbitrarios). Podés re-trazar los vértices de cualquier zona añadida directamente sobre el mapa:
               </p>
               <div style="display:flex; gap:0.35rem; margin-bottom:0.4rem;">
-                <input type="text" id="neighborhood-mention-input" list="buenos-aires-all-zones-datalist" class="salary-input" placeholder="Ej: Miramar, Tandil, Mar del Plata, Caballito, Lanús, Pilar..." style="flex:1; font-size:0.74rem; padding:0.35rem 0.55rem;" autocomplete="off">
+                <input type="text" id="neighborhood-mention-input" list="buenos-aires-all-zones-datalist" class="salary-input" placeholder="Ej: Chacarita, Belgrano, Recoleta, Miramar, Tandil, Pilar..." style="flex:1; font-size:0.74rem; padding:0.35rem 0.55rem;" autocomplete="off">
                 <button type="button" id="btn-mention-neighborhood" class="btn-sm btn-primary" style="padding:0.35rem 0.65rem; font-size:0.75rem;">+ Sumar</button>
               </div>
+              <!-- Selector desplegable de desambiguación cuando dos o más zonas homónimas coinciden en la búsqueda -->
+              <div id="homonym-disambiguation-box" style="display:none; background:rgba(245,158,11,0.14); border:1.5px solid #f59e0b; border-radius:6px; padding:0.55rem; margin-bottom:0.45rem; flex-direction:column; gap:0.4rem;"></div>
               <datalist id="buenos-aires-all-zones-datalist">
-                <!-- Se puebla dinámicamente con los 48 barrios de CABA y todas las ciudades/partidos de Provincia de Buenos Aires -->
+                <!-- Se puebla dinámicamente con los 48 barrios de CABA y todas las ciudades/partidos con detalle de municipio/provincia -->
               </datalist>
-              <!-- Desglose de las divisiones internas de las zonas que el usuario eligió -->
-              <div id="neighborhood-internal-subzones-box" style="display:none; flex-direction:column; gap:0.35rem; margin-top:0.35rem; padding-top:0.45rem; border-top:1px dashed var(--card-border); max-height:210px; overflow-y:auto;"></div>
-              <!-- Alertas Zonales de la Base de Datos Propia (Obras en estaciones de subte/tren, cortadas típicas de calles, cortes de rutas/accesos) -->
-              <div id="map-zonal-alerts-box" style="display:none; flex-direction:column; gap:0.35rem; margin-top:0.45rem; padding:0.5rem; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.45); border-radius:6px; font-size:0.71rem; color:#fde68a;"></div>
+              <!-- Desglose de las zonas que el usuario eligió (expande el flujo hacia abajo sin superponerse) -->
+              <div id="neighborhood-internal-subzones-box" class="zonal-subzones-flow-box" style="display:none;"></div>
             </div>
 
-            <!-- RANKING DE CONVENIENCIA PERSONALIZADO (SEGÚN VIAJE, GASTO O LUGARES FRECUENTADOS) -->
-            <div id="map-convenience-ranking-box" style="display:none; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.45); border-radius:var(--radius-sm); padding:0.7rem;">
+            <!-- Alertas Zonales en flujo normal del documento (se expande hacia abajo sin flotar ni superponer la lista de zonas añadidas) -->
+            <div id="map-zonal-alerts-box" class="zonal-alerts-flow-container" style="display:none;"></div>
+
+            <!-- CONVENIENCIA DE CONCENTRACIÓN DE SERVICIOS (SEGÚN VIAJE, GASTO O LUGARES E INSTITUCIONES FRECUENTADAS) -->
+            <div id="map-convenience-ranking-box" style="display:none; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.45); border-radius:var(--radius-sm); padding:0.7rem; flex-shrink:0;">
               <div style="display:flex; justify-content:space-between; align-items:center; gap:0.35rem; margin-bottom:0.4rem;">
-                <span style="font-size:0.74rem; font-weight:800; color:#34d399; text-transform:uppercase;">🏆 Ranking de Conveniencia</span>
+                <span style="font-size:0.72rem; font-weight:800; color:#34d399; text-transform:uppercase;">🏆 Conveniencia de concentración de servicios</span>
                 <span id="ranking-priority-badge" style="font-size:0.65rem; background:rgba(16,185,129,0.18); color:#a7f3d0; padding:2px 6px; border-radius:999px; font-weight:700;">🎯 Equilibrio</span>
               </div>
               <div id="map-convenience-ranking-list" style="display:flex; flex-direction:column; gap:0.35rem;"></div>
             </div>
 
             <!-- DELIMITAR LÍMITES CALLE POR CALLE -->
-            <div>
+            <div style="flex-shrink:0;">
               <h4 style="font-size: 0.82rem; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.35rem; font-weight:700;">
                 ✏️ O Dibujar Límites Calle por Calle
               </h4>
@@ -451,7 +573,7 @@
             </div>
 
             <!-- PUNTOS DE INTERÉS MÚLTIPLES (CON DIRECCIÓN EDITABLE Y RE-INDEXADO AUTOMÁTICO A, B, C...) -->
-            <div>
+            <div style="flex-shrink:0;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.35rem;">
                 <h4 style="font-size: 0.82rem; text-transform: uppercase; color: var(--text-muted); font-weight:700;">
                   📍 Puntos de Interés (Dirección o Arrastrar)
@@ -472,35 +594,30 @@
               </div>
 
               <!-- Lista dinámica de Puntos de Interés -->
-              <div id="pois-list-container" style="display:flex; flex-direction:column; gap:0.45rem; max-height:240px; overflow-y:auto; padding-right:2px;">
+              <div id="pois-list-container" style="display:flex; flex-direction:column; gap:0.45rem;">
                 <!-- Generado dinámicamente por app.js -->
               </div>
             </div>
 
             <!-- Leyenda Semafórica -->
-            <div style="background:var(--bg-primary); padding:0.55rem; border-radius:var(--radius-sm); font-size:0.72rem; display:grid; grid-template-columns:1fr 1fr; gap:0.3rem;">
+            <div style="background:var(--bg-primary); padding:0.55rem; border-radius:var(--radius-sm); font-size:0.72rem; display:grid; grid-template-columns:1fr 1fr; gap:0.3rem; flex-shrink:0;">
               <span>🟢 <strong>Verde:</strong> Accesible</span>
               <span>🟡 <strong>Amarillo:</strong> Medio</span>
               <span>🟠 <strong>Naranja:</strong> Exigente</span>
               <span>🔴 <strong>Rojo:</strong> Supera sueldo</span>
             </div>
 
-            <button class="btn-primary" id="btn-map-go-results" style="padding:0.75rem; font-weight:700; border-radius:var(--radius-sm); border:none; cursor:pointer;">
+            <button class="btn-primary" id="btn-map-go-results" style="padding:0.75rem; font-weight:700; border-radius:var(--radius-sm); border:none; cursor:pointer; flex-shrink:0;">
               Ver Desglose Zonal y Links Filtrados →
             </button>
           </aside>
 
-          <!-- Contenedor del Mapa Real Fair-Use (OpenStreetMap / Carto / Esri con Proxy Local + Sub-Zonas Orgánicas + Rutas Nítidas) -->
+          <!-- Contenedor del Mapa Real Fair-Use (OpenStreetMap en esquina inferior derecha sin recuadros distractivos) -->
           <div class="map-container-box" id="map-outer-box">
-            <div class="map-top-controls-overlay" style="display:flex; justify-content:space-between; align-items:center; width:calc(100% - 90px); left:55px; right:16px; pointer-events:none;">
+            <div class="map-top-controls-overlay" style="display:flex; justify-content:flex-start; align-items:center; width:calc(100% - 90px); left:55px; right:16px; pointer-events:none;">
               <span class="map-hint-pill" style="pointer-events:auto;">
-                🖱️ Pasá el mouse por una <strong>zona</strong> para ver su resumen (click para ir al desglose), o por un <strong>punto</strong> para iluminar las rutas
+                🖱️ Hacé <strong>click directo</strong> en una <strong>zona</strong> para abrir su desglose, o tocá un <strong>punto</strong> para iluminar las rutas
               </span>
-              <div style="pointer-events:auto; display:flex; gap:0.35rem; background:rgba(15,23,42,0.92); padding:0.25rem; border-radius:999px; border:1px solid rgba(56,189,248,0.4);">
-                <button type="button" class="btn-sm map-tile-switch active" data-provider="osm" style="font-size:0.7rem; padding:0.2rem 0.6rem; border-radius:999px; background:#0284c7; color:#fff; border:none; cursor:pointer;">🗺️ OpenStreetMap (Fair Use)</button>
-                <button type="button" class="btn-sm map-tile-switch" data-provider="carto" style="font-size:0.7rem; padding:0.2rem 0.6rem; border-radius:999px; background:transparent; color:#cbd5e1; border:none; cursor:pointer;">✨ Carto Claridad</button>
-                <button type="button" class="btn-sm map-tile-switch" data-provider="esri" style="font-size:0.7rem; padding:0.2rem 0.6rem; border-radius:999px; background:transparent; color:#cbd5e1; border:none; cursor:pointer;">🛣️ Esri Callejero</button>
-              </div>
             </div>
 
             <!-- Leyenda flotante de Rutas Multi-Modales cuando se ilumina un Punto de Interés -->
@@ -515,10 +632,15 @@
               <button class="btn-sm btn-secondary" id="btn-cancel-drawn-polygon">✕ Cancelar</button>
             </div>
 
-            <!-- Tooltip Flotante al pasar el mouse por encima de una zona (Alquiler arriba + Coste de vida y gastos alrededor abajo) -->
+            <!-- Tooltip Flotante para Puntos de Interés -->
             <div class="map-hover-tooltip" id="map-hover-tooltip"></div>
 
-            <!-- MAPA REAL LIBRE DE USO (LEAFLET + OPENSTREETMAP CON CACHÉ LOCAL) -->
+            <!-- Indicador de OpenStreetMap en la esquina inferior derecha sin recuadros distractivos -->
+            <div class="osm-bottom-right-minimal" id="osm-bottom-right-credit">
+              OpenStreetMap
+            </div>
+
+            <!-- MAPA REAL LIBRE DE USO (LEAFLET + OPENSTREETMAP) -->
             <div id="leaflet-map" class="leaflet-map-canvas"></div>
           </div>
         </div>
@@ -587,11 +709,12 @@
             </h4>
             <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:0.85rem;">
               <div>
-                <label style="font-size:0.76rem; color:var(--text-secondary); display:block; margin-bottom:0.25rem; font-weight:600;">Edificio, PH o Casa:</label>
+                <label style="font-size:0.76rem; color:var(--text-secondary); display:block; margin-bottom:0.25rem; font-weight:600;">Edificio, PH, Casa o Barrio Cerrado:</label>
                 <select id="filter-property-type" class="salary-input" style="width:100%;" autocomplete="off">
                   <option value="departamento" selected>Departamento en Edificio</option>
                   <option value="ph">PH (Propiedad Horizontal)</option>
                   <option value="casa">Casa / Chalet / Quinta</option>
+                  <option value="barrio_cerrado">Barrio Cerrado / Country</option>
                   <option value="duplex">Dúplex / Tríplex</option>
                   <option value="semipiso">Piso / Semipiso</option>
                   <option value="loft">Loft / Divisible</option>
@@ -705,11 +828,11 @@
               </div>
             </div>
 
-            <!-- 4. COCHERA DETALLADA: TECHADA, SIN TECHAR / ENTRADA Y CANTIDAD DE AUTOS POR SEPARADO -->
+            <!-- 4. COCHERA DETALLADA: CONTADORES DE AUTOS TECHADOS Y DESCUBIERTOS VISIBLES SOLO EN "BARRIO CERRADO" -->
             <div style="background:var(--bg-tertiary); border:1px solid rgba(56,189,248,0.35); border-radius:6px; padding:0.85rem;">
               <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.55rem;">
                 <label style="font-size:0.8rem; font-weight:800; color:#38bdf8;">
-                  🚗 Cochera y Capacidad de Autos (Techada vs. Sin Techar / Entrada)
+                  🚗 Cochera
                 </label>
                 <span id="filter-garage-total-summary" style="font-size:0.72rem; background:rgba(56,189,248,0.14); color:#bae6fd; padding:2px 8px; border-radius:999px; font-weight:700;">
                   Indistinto
@@ -723,20 +846,23 @@
                     <option value="no">Sin cochera</option>
                     <option value="techada">Con cochera techada / cubierta</option>
                     <option value="descubierta">Con cochera sin techar / descubierta</option>
-                    <option value="mixta_country">Mixta: Techada + Entrada descubierta (ej. Casa / Country)</option>
+                    <option value="mixta_country">Mixta: Techada + Entrada descubierta (Barrio Cerrado / Country)</option>
                   </select>
                 </div>
-                <div>
-                  <label style="font-size:0.73rem; color:var(--text-secondary); display:block; margin-bottom:0.2rem; font-weight:600;">🏠 Autos bajo techo (Techada):</label>
-                  <input type="number" id="filter-garage-covered-cars" class="salary-input" min="0" max="20" value="0" placeholder="Cant. autos techados (ej: 2)" style="width:100%; font-size:0.78rem;" autocomplete="off">
-                </div>
-                <div>
-                  <label style="font-size:0.73rem; color:var(--text-secondary); display:block; margin-bottom:0.2rem; font-weight:600;">🌤️ Autos sin techar (Entrada / Rampa):</label>
-                  <input type="number" id="filter-garage-uncovered-cars" class="salary-input" min="0" max="20" value="0" placeholder="Cant. en entrada (ej: 3)" style="width:100%; font-size:0.78rem;" autocomplete="off">
+                <!-- Oculto por defecto; se muestra únicamente cuando el usuario selecciona "Barrio Cerrado / Country" en Tipo de Propiedad -->
+                <div id="garage-car-counters-wrap" style="display:none; grid-template-columns:repeat(auto-fit, minmax(195px, 1fr)); gap:0.75rem; grid-column: span 2;">
+                  <div>
+                    <label style="font-size:0.73rem; color:var(--text-secondary); display:block; margin-bottom:0.2rem; font-weight:600;">🏠 Autos bajo techo (Techada):</label>
+                    <input type="number" id="filter-garage-covered-cars" class="salary-input" min="0" max="20" value="0" placeholder="Cant. autos techados (ej: 2)" style="width:100%; font-size:0.78rem;" autocomplete="off">
+                  </div>
+                  <div>
+                    <label style="font-size:0.73rem; color:var(--text-secondary); display:block; margin-bottom:0.2rem; font-weight:600;">🌤️ Autos sin techar (Entrada / Rampa):</label>
+                    <input type="number" id="filter-garage-uncovered-cars" class="salary-input" min="0" max="20" value="0" placeholder="Cant. en entrada (ej: 3)" style="width:100%; font-size:0.78rem;" autocomplete="off">
+                  </div>
                 </div>
               </div>
-              <p style="font-size:0.7rem; color:var(--text-muted); margin-top:0.4rem;">
-                💡 Podés indicar cuántos autos entran bajo techo y cuántos más en la entrada o rampa descubierta (ideal para casas, chalets o countries).
+              <p id="garage-barrio-cerrado-hint" style="display:none; font-size:0.7rem; color:var(--text-muted); margin-top:0.4rem;">
+                💡 Al elegir <strong>Barrio Cerrado / Country</strong>, podés indicar cuántos autos entran bajo techo y cuántos más en la entrada o rampa descubierta.
               </p>
             </div>
           </div>
@@ -900,13 +1026,13 @@
       </div>
     </section>
 
-    <!-- 5. RESULTADOS: DESGLOSE EXTENSO DE VIVIENDA (ALQUILER + IMPUESTOS/SERVICIOS), COMERCIOS Y LINKS AL FINAL -->
+    <!-- 5. RESULTADOS: DESGLOSE ESTRUCTURALMENTE SEPARADO (1. ALQUILER | 2. EXPENSAS | 3. COSTO DE VIDA) CON UMBRALES "A PARTIR DE X [MONEDA]" Y FILTRO DE CUARTILES -->
     <section class="screen" id="screen-resultados">
       <div class="results-top-bar">
         <div>
-          <h2 style="font-size: 1.4rem; font-weight: 800;" id="results-main-heading">Desglose Genuino de Vivienda, Comercios del Barrio y Portales</h2>
+          <h2 style="font-size: 1.4rem; font-weight: 800;" id="results-main-heading">Desglose Estructural Separado: Alquiler, Expensas y Costo de Vida</h2>
           <span style="font-size: 0.825rem; color: var(--text-secondary);" id="results-meta-count">
-            Seleccioná cualquier sub-zona para comparar cuánto cuesta genuinamente el alquiler + impuestos/servicios, qué plata manejar en los comercios y abrir tus portales filtrados.
+            Valores expresados "A partir de X [Moneda]" depurados con filtro de cuartiles y rangos lógicos (sin falsos positivos por precios irrisorios), respetando tus ambientes, baños y zona elegida.
           </span>
         </div>
 
@@ -915,7 +1041,7 @@
 
           <!-- Ordenar sub-zonas por cercanía a puntos o precio -->
           <div style="display:flex; align-items:center; gap:0.5rem;">
-            <label for="sort-select-input" style="font-size:0.82rem; font-weight:600; color:var(--text-secondary);">Ordenar sub-zonas por:</label>
+            <label for="sort-select-input" style="font-size:0.82rem; font-weight:600; color:var(--text-secondary);">Ordenar zonas por:</label>
             <select id="sort-select-input" class="salary-input" style="width: auto; font-size:0.8rem;">
               <optgroup label="Cercanía a Puntos de Interés" id="sort-pois-optgroup">
                 <option value="cercania_todos" selected>Cercanía: A todos tus puntos marcados</option>
@@ -926,9 +1052,9 @@
                 <option value="perm_bac">Secuencial: B &gt; A &gt; C</option>
                 <option value="perm_cab">Secuencial: C &gt; A &gt; B</option>
               </optgroup>
-              <optgroup label="Costo Genuino de Vivienda">
-                <option value="precio_asc">Vivienda Total: Menor → Mayor</option>
-                <option value="precio_desc">Vivienda Total: Mayor → Menor</option>
+              <optgroup label="Umbral Mínimo Depurado (A partir de...)">
+                <option value="precio_asc">Costo Total (A partir de): Menor → Mayor</option>
+                <option value="precio_desc">Costo Total (A partir de): Mayor → Menor</option>
               </optgroup>
             </select>
           </div>
@@ -939,10 +1065,10 @@
       <div id="results-zones-pills-bar" style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1.25rem;"></div>
 
       <!-- PANEL PRINCIPAL DE ZONA SELECCIONADA:
-           1) ARRIBA: Cuánto cuesta genuinamente la vivienda (Alquiler + Expensas + Impuestos y Servicios todo junto)
-           2) ABAJO: Costo de vivir en cuanto a los comercios de los alrededores (precios esperables en la zona, sin columna obvia de qué venden)
-           3) POR QUÉ CONVIENE O NO VIVIR EN ESTA ZONA
-           4) AL FINAL: Links que redirigen a las páginas cargadas con los filtros ya aplicados -->
+           1) BARRA DE VARIABLES TRANSMITIDAS (Zona elegida, Ambientes exactos, Baños exactos, Dormitorios, Tipología, Moneda)
+           2) TRES PILARES ESTRUCTURALMENTE SEPARADOS: Alquiler ("A partir de...") | Expensas ("A partir de...") | Costo de Vida ("A partir de...")
+           3) AUDITORÍA DE CUARTILES Y RANGOS LÓGICOS (Descarte de precios irrisorios / falsos positivos)
+           4) DESCONSTRUCCIÓN EXPANDIBLE DE COMERCIOS Y SERVICIOS + LINKS A PORTALES CON TODOS LOS FILTROS -->
       <div id="focused-zone-deep-dive" style="margin-bottom: 2.5rem;"></div>
     </section>
 

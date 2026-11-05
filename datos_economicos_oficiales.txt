@@ -1,0 +1,47 @@
+# ==============================================================================
+# CALCULIVING - ARCHIVO DE DATOS ECONOMICOS OFICIALES (LECTURA Y EDICION RAPIDA)
+# ==============================================================================
+# Este archivo .txt se actualiza mensualmente consultando las 4 APIs oficiales
+# y puede abrirse, leerse y modificarse rapidamente con cualquier editor de texto.
+# Formato: CLAVE = VALOR (las lineas que empiezan con # son comentarios).
+# ==============================================================================
+
+PERIODO_ACTUALIZACION_MENSUAL = 2026-11
+FRECUENCIA_ACTUALIZACION = MENSUAL
+
+# ------------------------------------------------------------------------------
+# 1. IPC / INDEC - INFLACION MENSUAL OFICIAL
+# API Oficial Series de Tiempo INDEC (datos.gob.ar)
+# ------------------------------------------------------------------------------
+IPC_INDEC_MENSUAL_PCT = 2.7
+IPC_INDEC_FECHA_CORTE = 2026-11
+API_URL_IPC_INDEC = https://apis.datos.gob.ar/series/api/series/?ids=145.3_INGNACNAL_DICI_M_38&limit=2&sort=desc
+
+# ------------------------------------------------------------------------------
+# 2. SECRETARIA DE ENERGIA - PRECIOS DE NAFTA EN SURTIDOR (ARS / LITRO)
+# API Oficial Precios en Surtidor Resolucion 314/2016 (datos.energia.gob.ar)
+# ------------------------------------------------------------------------------
+NAFTA_SUPER_SURTIDOR_ARS = 1195
+NAFTA_PREMIUM_SURTIDOR_ARS = 1475
+GASOIL_GRADO3_SURTIDOR_ARS = 1420
+GNC_SURTIDOR_M3_ARS = 560
+API_URL_SECRETARIA_ENERGIA = https://datos.energia.gob.ar/api/3/action/datastore_search?resource_id=80ac25de-a44a-4445-9215-090cf55cfda5&limit=20
+
+# ------------------------------------------------------------------------------
+# 3. BANCO NACION (BNA) - DOLAR OFICIAL TIPO VENDEDOR (ARS / USD)
+# Cotizacion Divisa / Billete Tipo Vendedor Banco de la Nacion Argentina
+# ------------------------------------------------------------------------------
+DOLAR_BNA_TIPO_VENDEDOR_ARS = 1095
+API_URL_BANCO_NACION = https://dolarapi.com/v1/dolares/oficial
+
+# ------------------------------------------------------------------------------
+# 4. RED SUBE - CUADRO TARIFARIO OFICIAL DE TRANSPORTE PUBLICO (ARS)
+# Ministerio de Transporte / Secretaria de Transporte - Red SUBE AMBA
+# ------------------------------------------------------------------------------
+RED_SUBE_COLECTIVO_MIN_ARS = 425
+RED_SUBE_SUBTE_CABA_ARS = 832
+RED_SUBE_TREN_AMBA_ARS = 320
+RED_SUBE_DESCUENTO_2DO_VIAJE_PCT = 50
+RED_SUBE_DESCUENTO_3ER_VIAJE_PCT = 75
+API_URL_RED_SUBE = https://www.argentina.gob.ar/redsube
+
