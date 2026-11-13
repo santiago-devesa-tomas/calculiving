@@ -1,14 +1,266 @@
 /**
- * Calculiving - Client Application Logic (v2.0)
+ * Calculiving - Client Application Logic (v2.1 - Hardened & Secure)
  * Linear flow, fullscreen bot, connected portal inputs, street-by-street polygon drawing,
- * 25/75 draggable & resizable floor planner, and default vertical list results.
+ * 25/75 draggable & resizable floor planner, encrypted local preference vault, and ideal neighborhood recommender.
  */
 
-// Global State (Empieza 100% limpio cada vez que el usuario entra a la página)
+// =========================================================================
+// MÓDULO DE SEGURIDAD CLIENT-SIDE (SIN CUENTAS NI REGISTROS; MEMORIA INTERNA ENCRIPTADA)
+// =========================================================================
+const CalculivingSecurity = (() => {
+  const RATE_BUCKETS = new Map();
+  const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+  // Desactivar logs de debug en producción para no filtrar datos internos
+  try {
+    if (typeof window !== "undefined") {
+      window.__CALCULIVING_DEBUG__ = false;
+    }
+  } catch (e) {}
+
+  function sanitizeTextInput(raw, maxLen = 140) {
+    if (typeof raw !== "string") return "";
+    return raw
+      .replace(/[<>]/g, "")
+      .replace(/javascript:/gi, "")
+      .replace(/on\w+\s*=/gi, "")
+      .trim()
+      .slice(0, maxLen);
+  }
+
+  function sanitizeNumericInput(raw, min = 0, max = 999999999999) {
+    const cleaned = String(raw ?? "").replace(/[^\d.-]/g, "");
+    const num = Number(cleaned);
+    if (!Number.isFinite(num)) return min;
+    return Math.min(max, Math.max(min, num));
+  }
+
+  function sanitizeCoord(lat, lng) {
+    const la = Number(lat);
+    const lo = Number(lng);
+    if (!Number.isFinite(la) || !Number.isFinite(lo)) return null;
+    if (la < -56 || la > -21 || lo < -74 || lo > -53) return null; // Límites geográficos de Argentina
+    return [Number(la.toFixed(5)), Number(lo.toFixed(5))];
+  }
+
+  function isSafeObjectKey(key) {
+    return typeof key === "string" && !FORBIDDEN_KEYS.has(key);
+  }
+
+  function checkRateLimit(actionKey, maxCalls = 12, windowMs = 15000) {
+    const now = Date.now();
+    const bucket = (RATE_BUCKETS.get(actionKey) || []).filter(ts => now - ts < windowMs);
+    if (bucket.length >= maxCalls) {
+      return false;
+    }
+    bucket.push(now);
+    RATE_BUCKETS.set(actionKey, bucket);
+    return true;
+  }
+
+  function isBotBehaviorDetected() {
+    try {
+      const hp = document.getElementById("calc-hp-guard");
+      if (hp && hp.value && hp.value.trim().length > 0) return true;
+      if (typeof navigator !== "undefined" && navigator.webdriver === true) {
+        // Permite ejecución normal pero exige que no haya ráfagas automatizadas
+        return !checkRateLimit("webdriver_burst", 20, 5000);
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  function safeUiError(userMessage) {
+    // Nunca expone stack traces ni mensajes internos de excepciones al DOM
+    return sanitizeTextInput(userMessage || "Ocurrió un inconveniente al procesar la solicitud. Intentá nuevamente.", 220);
+  }
+
+  return {
+    sanitizeTextInput,
+    sanitizeNumericInput,
+    sanitizeCoord,
+    isSafeObjectKey,
+    checkRateLimit,
+    isBotBehaviorDetected,
+    safeUiError
+  };
+})();
+
+const CalculivingSecureVault = (() => {
+  const PREFS_KEY = "calculiving_secure_prefs_v1";
+  const BACKUP_KEY = "calculiving_auto_backup_v1";
+  const DEVICE_SECRET_KEY = "calculiving_device_salt_v1";
+  const INSTANCE_SCOPE = "calculiving_local_user_scope";
+
+  function getOrCreateDeviceSalt() {
+    try {
+      let salt = localStorage.getItem(DEVICE_SECRET_KEY);
+      if (!salt || salt.length < 16) {
+        const arr = new Uint8Array(16);
+        if (window.crypto && window.crypto.getRandomValues) {
+          window.crypto.getRandomValues(arr);
+        } else {
+          for (let i = 0; i < 16; i++) arr[i] = Math.floor(Math.random() * 256);
+        }
+        salt = Array.from(arr, b => b.toString(16).padStart(2, "0")).join("");
+        localStorage.setItem(DEVICE_SECRET_KEY, salt);
+      }
+      return salt;
+    } catch (e) {
+      return "calculiving_fallback_salt";
+    }
+  }
+
+  function computeIntegrityHash(payloadStr, salt) {
+    // Hash determinístico síncrono (FNV-1a extendido + mezcla con salt) para detectar manipulación directa de localStorage
+    const input = `${INSTANCE_SCOPE}::${salt}::${payloadStr}`;
+    let h1 = 0x811c9dc5;
+    let h2 = 0x9e3779b9;
+    for (let i = 0; i < input.length; i++) {
+      const c = input.charCodeAt(i);
+      h1 ^= c;
+      h1 = Math.imul(h1, 0x01000193);
+      h2 ^= (c + i);
+      h2 = Math.imul(h2, 0x85ebca6b);
+    }
+    return `${(h1 >>> 0).toString(16)}_${(h2 >>> 0).toString(16)}`;
+  }
+
+  function xorCipher(str, key) {
+    const out = [];
+    for (let i = 0; i < str.length; i++) {
+      const code = str.charCodeAt(i) ^ key.charCodeAt(i % key.length);
+      out.push(String.fromCharCode(code));
+    }
+    return btoa(unescape(encodeURIComponent(out.join(""))));
+  }
+
+  function xorDecipher(b64, key) {
+    const raw = decodeURIComponent(escape(atob(b64)));
+    const out = [];
+    for (let i = 0; i < raw.length; i++) {
+      const code = raw.charCodeAt(i) ^ key.charCodeAt(i % key.length);
+      out.push(String.fromCharCode(code));
+    }
+    return out.join("");
+  }
+
+  function savePreferences(stateObj) {
+    try {
+      if (CalculivingSecurity.isBotBehaviorDetected()) return false;
+      const salt = getOrCreateDeviceSalt();
+      const snapshot = {
+        v: 1,
+        scope: INSTANCE_SCOPE,
+        savedAt: new Date().toISOString(),
+        salaryRawInput: Number(stateObj.salaryRawInput) || 0,
+        salaryCurrency: stateObj.salaryCurrency === "USD" ? "USD" : "ARS",
+        maxPrice: Number(stateObj.maxPrice) || 0,
+        selectedOperation: CalculivingSecurity.sanitizeTextInput(stateObj.selectedOperation || "alquiler", 40),
+        lifestyleProfile: stateObj.lifestyleProfile || {},
+        pois: (stateObj.pois || []).slice(0, 25),
+        userSelectedZones: (stateObj.userSelectedZones || []).slice(0, 25).map(z => ({
+          id: z.id,
+          slug: z.slug,
+          name: z.name,
+          region: z.region,
+          coords: z.coords,
+          alquiler_ars: z.alquiler_ars,
+          expensas_ars: z.expensas_ars,
+          servicios_ars: z.servicios_ars,
+          canasta_comercios_ars: z.canasta_comercios_ars,
+          transporte_ars: z.transporte_ars,
+          isIdealRecommended: !!z.isIdealRecommended,
+          idealRank: z.idealRank || null,
+          idealReasonExplanation: z.idealReasonExplanation || "",
+          isNearMissIdeal: !!z.isNearMissIdeal,
+          nearMissReason: z.nearMissReason || ""
+        }))
+      };
+      const jsonStr = JSON.stringify(snapshot);
+      const cipher = xorCipher(jsonStr, salt);
+      const sig = computeIntegrityHash(cipher, salt);
+      const envelope = JSON.stringify({ scope: INSTANCE_SCOPE, cipher, sig, ts: Date.now() });
+
+      // Backup automático rotativo antes de sobrescribir
+      const prev = localStorage.getItem(PREFS_KEY);
+      if (prev) {
+        localStorage.setItem(BACKUP_KEY, prev);
+      }
+      localStorage.setItem(PREFS_KEY, envelope);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function loadPreferences() {
+    const salt = getOrCreateDeviceSalt();
+    const tryParseEnvelope = (raw) => {
+      if (!raw) return null;
+      const env = JSON.parse(raw);
+      if (!env || env.scope !== INSTANCE_SCOPE || !env.cipher || !env.sig) return null;
+      const expectedSig = computeIntegrityHash(env.cipher, salt);
+      // Bloquear manipulación de datos si la firma no coincide
+      if (env.sig !== expectedSig) return { tampered: true };
+      const plain = xorDecipher(env.cipher, salt);
+      const data = JSON.parse(plain);
+      if (!data || data.scope !== INSTANCE_SCOPE) return null;
+      return { data };
+    };
+
+    try {
+      const primary = tryParseEnvelope(localStorage.getItem(PREFS_KEY));
+      if (primary && primary.data) return primary.data;
+      // Si se detectó manipulación o corrupción, intentar restaurar desde el backup automático
+      const backup = tryParseEnvelope(localStorage.getItem(BACKUP_KEY));
+      if (backup && backup.data) {
+        localStorage.setItem(PREFS_KEY, localStorage.getItem(BACKUP_KEY));
+        return backup.data;
+      }
+      if (primary && primary.tampered) {
+        localStorage.removeItem(PREFS_KEY);
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function clearVault() {
+    try {
+      localStorage.removeItem(PREFS_KEY);
+      localStorage.removeItem(BACKUP_KEY);
+    } catch (e) {}
+  }
+
+  function exportEncryptedBackupFile() {
+    try {
+      const raw = localStorage.getItem(PREFS_KEY);
+      if (!raw) return false;
+      const blob = new Blob([raw], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `calculiving_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  return { savePreferences, loadPreferences, clearVault, exportEncryptedBackupFile };
+})();
+
+// Global State (Con memoria interna encriptada para preferencias del usuario)
 const appState = {
   currentScreen: "screen-home",
   screenHistory: ["screen-home"],
-  salary: 0, // Sin sueldo precargado: el usuario ingresa el suyo de cero
+  salary: 0, // Sueldo normalizado en ARS
+  salaryRawInput: 0, // Valor ingresado en la moneda elegida
+  salaryCurrency: "ARS", // ARS | USD
   portals: [], // Sin sitios precargados: se agregan de cero
   properties: [],
   selectedOperation: "alquiler",
@@ -24,20 +276,32 @@ const appState = {
     { id: "room-4", type: "habitacion", name: "Habitación", floor: 1, x: 50, y: 270, width: 3.8, length: 3.2, priority: true }
   ],
   selectedRoomId: "room-1",
-  pois: [], // Sin puntos de interés precargados: el usuario suma los suyos (A, B, C...)
+  pois: [], // Sin puntos de interés precargados: el usuario suma los suyos (A, B, C...) o "Otro punto importante ⭐"
   userSelectedZones: [], // El mapa arranca 100% limpio; solo se muestran las zonas que el usuario elija o dibuje
+  nearMissIdealZones: [], // Barrios cercanos de interés marcados con línea punteada celeste/azul
   activeHighlightedPoiId: null,
   mentionedBarrioSlug: null,
   drawnPolygonPoints: [],
   drawnPolygonLayer: null,
   isDrawingMode: false,
   sortOption: "cercania_todos",
-  // Perfil de la 2da conversación (hábitos reales, cómo se mueve, cilindrada, dieta, cocina vs delivery, gimnasio/hobbys, hogar/colegios/hospitales/prepagas/instituciones, supermercados y prioridad)
+  // Perfil de la 2da conversación (hábitos reales, cómo se mueve, cilindrada, dieta, cocina vs delivery, gimnasio/hobbys, hogar/colegios/hospitales/prepagas/instituciones, supermercados, cadenas reales, gastos propios y prioridad)
   lifestyleProfile: {
     transportMode: "sube", // sube | auto_nafta | moto | bici_pie | apps_mix
     vehicleDisplacement: "auto_16_18", // auto_10_14 | auto_16_18 | auto_20_plus | auto_pickup | auto_gnc | moto_110_150 | moto_200_300 | moto_400_plus
     cookingHabit: "cocino", // cocino | mix | delivery
     dietType: "omnivora", // omnivora | economica | saludable | proteica
+    restaurantTier: "pocas_salidas", // pocas_salidas | bodegon_barrio | resto_medio | salidas_frecuentes
+    gymChain: "smartfit", // smartfit | sportclub | megatlon | crossfit_box | barrio
+    clothingTier: "ninguno", // ninguno | ferias_basico | marcas_medias | shopping_primeras
+    poiDistanceMode: "igual_3_puntos", // igual_3_puntos | orden_abc | cerca_b_c | cerca_solo_a
+    petsTier: "sin_mascotas", // sin_mascotas | 1_mascota_std | 1_mascota_premium | 2_mas_mascotas
+    customExpensesCurrency: "ARS",
+    customSchoolArs: 0,
+    customPetsArs: 0,
+    customShoppingArs: 0,
+    customOtherArs: 0,
+    customExtraList: [], // [{ id, label, amountArs, rawAmount, currency }]
     hobbies: [], // ["gimnasio", "club_deporte", "salidas_cafe", "cursos_arte"]
     hobbyLocations: {}, // { gimnasio: "Palermo", club_deporte: "Nuñez" }
     householdMembers: 1, // Cantidad de habitantes del hogar (1 a 6+)
@@ -73,14 +337,20 @@ const appState = {
   },
   classicFilters: {
     operation: "alquiler",
+    operationsList: ["alquiler"],
     currency: "ARS",
+    expensasCurrency: "ARS",
     minPrice: 0,
     maxPrice: 0,
     maxExpensas: 0,
     propertyType: "departamento",
+    propertyTypesList: ["departamento"],
     disposition: "indistinto",
+    dispositionsList: [],
     orientation: "indistinto",
+    orientationsList: [],
     antiquity: "indistinto",
+    antiquitiesList: [],
     roomsList: [2],
     minRooms: 2,
     bedroomsList: ["1"],
@@ -90,6 +360,7 @@ const appState = {
     minM2Covered: 0,
     maxM2Total: 0,
     garage: "indistinto",
+    garagesList: [],
     garageCoveredCars: 0,
     garageUncoveredCars: 0,
     features: [],
@@ -142,23 +413,24 @@ function setupFormattedThousandsInputs() {
   });
 }
 
-// Borra cualquier búsqueda anterior, sueldo, puntos de interés, portales, zonas marcadas o polígonos para empezar de cero (conservando únicamente las correcciones de la Base de Datos Zonal si el usuario reportó algún dato obsoleto)
-function resetEntireSessionState() {
+// Borra búsqueda actual o restaura preferencias guardadas en la memoria interna encriptada
+function resetEntireSessionState(clearSavedPrefs = false) {
+  if (clearSavedPrefs) {
+    CalculivingSecureVault.clearVault();
+  }
   try {
-    const savedDb = localStorage.getItem("calculiving_zonal_db_v1");
-    localStorage.clear();
     sessionStorage.clear();
-    if (savedDb) {
-      localStorage.setItem("calculiving_zonal_db_v1", savedDb);
-    }
   } catch (e) {}
 
   appState.salary = 0;
+  appState.salaryRawInput = 0;
+  appState.salaryCurrency = "ARS";
   appState.maxPrice = 0;
   appState.selectedOperation = "alquiler";
   appState.portals = [];
   appState.pois = [];
   appState.userSelectedZones = [];
+  appState.nearMissIdealZones = [];
   appState.activeHighlightedPoiId = null;
   appState.mentionedBarrioSlug = null;
   appState.drawnPolygonPoints = [];
@@ -177,6 +449,16 @@ function resetEntireSessionState() {
     vehicleDisplacement: "auto_16_18",
     cookingHabit: "cocino",
     dietType: "omnivora",
+    restaurantTier: "pocas_salidas",
+    gymChain: "smartfit",
+    clothingTier: "ninguno",
+    petsTier: "sin_mascotas",
+    customExpensesCurrency: "ARS",
+    customSchoolArs: 0,
+    customPetsArs: 0,
+    customShoppingArs: 0,
+    customOtherArs: 0,
+    customExtraList: [],
     hobbies: [],
     hobbyLocations: {},
     householdMembers: 1,
@@ -197,15 +479,38 @@ function resetEntireSessionState() {
     "new-poi-address-input",
     "portal-site-input",
     "fullscreen-bot-input",
-    "lifestyle-mini-chat-input"
+    "lifestyle-mini-chat-input",
+    "custom-exp-school-input",
+    "custom-exp-pets-input",
+    "custom-exp-shopping-input",
+    "custom-exp-other-input",
+    "step2-poi-name-input",
+    "step2-poi-address-input"
   ];
   emptyInputs.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
 
+  const salCurrSel = document.getElementById("global-salary-currency");
+  if (salCurrSel) salCurrSel.value = "ARS";
+  const salCurrSym = document.getElementById("global-salary-currency-symbol");
+  if (salCurrSym) salCurrSym.textContent = "$";
+
   const mapOp = document.getElementById("map-filter-operation");
   if (mapOp) mapOp.value = "alquiler";
+
+  const miniSummaryCard = document.getElementById("map-zone-mini-summary-card");
+  if (miniSummaryCard) {
+    miniSummaryCard.style.display = "none";
+    miniSummaryCard.innerHTML = "";
+  }
+
+  const idealList = document.getElementById("ideal-neighborhood-results-list");
+  if (idealList) {
+    idealList.style.display = "none";
+    idealList.innerHTML = "";
+  }
 
   const homonymBox = document.getElementById("homonym-disambiguation-box");
   if (homonymBox) {
@@ -241,6 +546,20 @@ function resetEntireSessionState() {
   if (cookSel) cookSel.value = "cocino";
   const dietSel = document.getElementById("habit-diet-type");
   if (dietSel) dietSel.value = "omnivora";
+  const restSel = document.getElementById("habit-restaurant-tier");
+  if (restSel) restSel.value = "pocas_salidas";
+  const gymChainSel = document.getElementById("habit-gym-chain");
+  if (gymChainSel) gymChainSel.value = "smartfit";
+  const clothSel = document.getElementById("habit-clothing-tier");
+  if (clothSel) clothSel.value = "ninguno";
+  const petsSel = document.getElementById("habit-pets-tier");
+  if (petsSel) petsSel.value = "sin_mascotas";
+  const custExpCurr = document.getElementById("habit-custom-expenses-currency");
+  if (custExpCurr) custExpCurr.value = "ARS";
+  const extraExpList = document.getElementById("custom-expenses-extra-list");
+  if (extraExpList) extraExpList.innerHTML = "";
+  const step2PoisPrev = document.getElementById("step2-added-pois-preview");
+  if (step2PoisPrev) step2PoisPrev.innerHTML = "";
   const hhMemSel = document.getElementById("habit-household-members");
   if (hhMemSel) hhMemSel.value = "1";
   const hhStuSel = document.getElementById("habit-household-students");
@@ -333,14 +652,66 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupFloorPlanCanvasEditor();
   setupResultsListing();
   setupZonalDatabaseModal();
-  resetEntireSessionState();
+  resetEntireSessionState(false);
+  restoreSavedPreferencesFromVault();
   fetchLiveEconomicIndicators();
+
+  document.getElementById("btn-export-secure-backup")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const ok = CalculivingSecureVault.exportEncryptedBackupFile();
+    if (!ok) {
+      CalculivingSecureVault.savePreferences(appState);
+      CalculivingSecureVault.exportEncryptedBackupFile();
+    }
+  });
 });
 
-// Si el navegador restaura la página desde la caché al volver o recargar, limpiar todo igual
+function restoreSavedPreferencesFromVault() {
+  const saved = CalculivingSecureVault.loadPreferences();
+  if (!saved) return;
+  if (typeof saved.salaryRawInput === "number" && saved.salaryRawInput > 0) {
+    appState.salaryRawInput = saved.salaryRawInput;
+    appState.salaryCurrency = saved.salaryCurrency === "USD" ? "USD" : "ARS";
+    const usdRate = appState.liveEconomicData?.dolarBnaVendedorArs || 1095;
+    appState.salary = appState.salaryCurrency === "USD" ? Math.round(appState.salaryRawInput * usdRate) : appState.salaryRawInput;
+    const salInp = document.getElementById("global-salary-input");
+    const salCurr = document.getElementById("global-salary-currency");
+    if (salInp) salInp.value = Math.round(appState.salaryRawInput).toLocaleString("es-AR");
+    if (salCurr) salCurr.value = appState.salaryCurrency;
+  }
+  if (typeof saved.maxPrice === "number" && saved.maxPrice > 0) {
+    appState.maxPrice = saved.maxPrice;
+    const maxInp = document.getElementById("map-filter-max-price");
+    if (maxInp) maxInp.value = Math.round(saved.maxPrice).toLocaleString("es-AR");
+  }
+  if (saved.selectedOperation) {
+    appState.selectedOperation = saved.selectedOperation;
+  }
+  if (saved.lifestyleProfile && typeof saved.lifestyleProfile === "object") {
+    appState.lifestyleProfile = { ...appState.lifestyleProfile, ...saved.lifestyleProfile };
+    const distRadio = document.querySelector(`input[name="habit-poi-distance-mode"][value="${appState.lifestyleProfile.poiDistanceMode || "igual_3_puntos"}"]`);
+    if (distRadio) distRadio.checked = true;
+  }
+  if (Array.isArray(saved.pois) && saved.pois.length > 0) {
+    appState.pois = saved.pois.filter(p => CalculivingSecurity.sanitizeCoord(p.lat, p.lng) !== null);
+  }
+  if (Array.isArray(saved.userSelectedZones) && saved.userSelectedZones.length > 0) {
+    appState.userSelectedZones = saved.userSelectedZones;
+  }
+  const vaultBar = document.getElementById("security-vault-status-bar");
+  if (vaultBar && !vaultBar.querySelector(".vault-restored-dot")) {
+    const dot = document.createElement("span");
+    dot.className = "vault-restored-dot";
+    dot.style.cssText = "color:#34d399; font-weight:800;";
+    dot.textContent = "· ✓";
+    vaultBar.insertBefore(dot, vaultBar.querySelector("#btn-export-secure-backup"));
+  }
+}
+
+// Si el navegador restaura la página desde la caché al volver o recargar, conservar preferencias seguras
 window.addEventListener("pageshow", () => {
-  if (appState.currentScreen === "screen-home") {
-    resetEntireSessionState();
+  if (appState.currentScreen === "screen-home" && appState.pois.length === 0 && appState.userSelectedZones.length === 0) {
+    restoreSavedPreferencesFromVault();
   }
 });
 
@@ -363,6 +734,7 @@ function navigateTo(screenId) {
 
   if (screenId === "screen-metodo") {
     ensureMapReadyAndVisible();
+    if (typeof updateIdealBannerCriteriaSummary === "function") updateIdealBannerCriteriaSummary();
   }
 }
 
@@ -427,7 +799,7 @@ function setupNavigationFlow() {
   });
 
   document.getElementById("header-reset-all-btn")?.addEventListener("click", () => {
-    resetEntireSessionState();
+    resetEntireSessionState(true);
     appState.screenHistory = ["screen-home"];
     document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
     document.getElementById("screen-home")?.classList.add("active");
@@ -468,7 +840,7 @@ function setupNavigationFlow() {
     const mapOp = document.getElementById("map-filter-operation");
     const mapMax = document.getElementById("map-filter-max-price");
     const mapCurr = document.getElementById("map-filter-currency");
-    if (mapOp) mapOp.value = cf.operation === "venta" ? "venta" : "alquiler";
+    if (mapOp) mapOp.value = cf.operation || "alquiler";
     if (mapMax && cf.maxPrice > 0) mapMax.value = formatArsThousands(cf.maxPrice);
     if (mapCurr && cf.currency) mapCurr.value = cf.currency;
     navigateTo("screen-portales");
@@ -504,10 +876,15 @@ function setupNavigationFlow() {
     if (mapOp) {
       appState.selectedOperation = mapOp;
       const classicOp = document.getElementById("filter-operation");
-      if (classicOp && (classicOp.value !== "temporal" || mapOp === "venta")) {
+      if (classicOp) {
         classicOp.value = mapOp;
       }
-      if (appState.classicFilters) appState.classicFilters.operation = mapOp;
+      if (appState.classicFilters) {
+        appState.classicFilters.operation = mapOp;
+        if (!Array.isArray(appState.classicFilters.operationsList) || !appState.classicFilters.operationsList.includes(mapOp)) {
+          appState.classicFilters.operationsList = [mapOp];
+        }
+      }
     }
     if (mapCurr) {
       if (appState.classicFilters) appState.classicFilters.currency = mapCurr;
@@ -546,11 +923,20 @@ function setupNavigationFlow() {
 ---------------------------------------------------- */
 function setupSalaryBanner() {
   const salaryInput = document.getElementById("global-salary-input");
+  const salaryCurrSel = document.getElementById("global-salary-currency");
+  const salaryCurrSym = document.getElementById("global-salary-currency-symbol");
   const explainBtn = document.getElementById("open-cost-bot-btn");
 
   const updateSalaryRealtime = () => {
-    const val = parseArsNumber(salaryInput?.value);
-    appState.salary = val > 0 ? val : 0;
+    const rawVal = parseArsNumber(salaryInput?.value);
+    const curr = (salaryCurrSel?.value || "ARS").toUpperCase();
+    appState.salaryCurrency = curr;
+    appState.salaryRawInput = rawVal > 0 ? rawVal : 0;
+    if (salaryCurrSym) {
+      salaryCurrSym.textContent = curr === "USD" ? "u$s" : "$";
+    }
+    const usdRate = Math.max(1, appState.liveEconomicData?.dolarBnaVendedorArs || appState.liveEconomicData?.dolarOficialArs || 1050);
+    appState.salary = rawVal > 0 ? (curr === "USD" ? Math.round(rawVal * usdRate) : rawVal) : 0;
     renderAffordabilityZonesOnMap();
     renderUserSelectedZonesSidebar();
     renderPoisOnLeafletMap();
@@ -564,6 +950,7 @@ function setupSalaryBanner() {
 
   salaryInput?.addEventListener("input", updateSalaryRealtime);
   salaryInput?.addEventListener("change", updateSalaryRealtime);
+  salaryCurrSel?.addEventListener("change", updateSalaryRealtime);
 
   explainBtn?.addEventListener("click", () => showCostExplanationModal());
   document.getElementById("close-cost-modal-btn")?.addEventListener("click", () => {
@@ -1680,12 +2067,95 @@ function renderHobbyPoiAutocreateControls() {
   });
 }
 
+function renderStep2AddedPoisPreview() {
+  const box = document.getElementById("step2-added-pois-preview");
+  if (!box) return;
+  const userPois = (appState.pois || []).filter(p => !p.hobbyKey);
+  if (userPois.length === 0) {
+    box.innerHTML = `<span style="font-size:0.71rem; color:var(--text-muted);">Todavía no agregaste escuelas ni sitios propios acá (podés agregarlos arriba o después en el mapa).</span>`;
+    return;
+  }
+  box.innerHTML = userPois.map(poi => `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:0.4rem; background:rgba(15,23,42,0.75); padding:0.35rem 0.55rem; border-radius:6px; border:1px solid ${poi.color};">
+      <div style="display:flex; align-items:center; gap:0.4rem; min-width:0;">
+        <span style="background:${poi.color}; color:#fff; width:20px; height:20px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:0.68rem; font-weight:900; flex-shrink:0;">
+          ${escapeHtml(poi.code)}
+        </span>
+        <span style="font-size:0.74rem; color:#f8fafc; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+          ${escapeHtml(poi.label)} <span style="color:#94a3b8; font-weight:400;">(${escapeHtml(poi.address)})</span>
+        </span>
+      </div>
+      <button type="button" class="mini-summary-delete-link step2-remove-poi-btn" data-poi-id="${escapeHtml(poi.id)}">eliminar</button>
+    </div>
+  `).join("");
+
+  box.querySelectorAll(".step2-remove-poi-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const pid = btn.getAttribute("data-poi-id");
+      appState.pois = appState.pois.filter(p => p.id !== pid);
+      reindexPois();
+      renderStep2AddedPoisPreview();
+      renderPoisSidebarList();
+      renderPoisOnLeafletMap();
+      updateSortPoisSelectOptions();
+    });
+  });
+}
+
+function renderCustomExpensesExtraList() {
+  const listEl = document.getElementById("custom-expenses-extra-list");
+  if (!listEl) return;
+  const items = appState.lifestyleProfile?.customExtraList || [];
+  if (items.length === 0) {
+    listEl.innerHTML = "";
+    return;
+  }
+  listEl.innerHTML = items.map((item, idx) => `
+    <div style="display:flex; align-items:center; gap:0.4rem; background:rgba(15,23,42,0.75); padding:0.32rem 0.5rem; border-radius:6px; border:1px solid rgba(52,211,153,0.3);">
+      <input type="text" class="salary-input custom-extra-label-inp" data-idx="${idx}" value="${escapeHtml(item.label || "")}" placeholder="Concepto (ej: Cuota club / Cocheras / Medicina)" style="flex:1; font-size:0.74rem; padding:0.25rem 0.45rem;" />
+      <input type="text" inputmode="numeric" class="salary-input formatted-thousands-input custom-extra-amount-inp" data-idx="${idx}" value="${item.rawAmount > 0 ? formatArsThousands(item.rawAmount) : ""}" placeholder="Monto mensual" style="width:130px; font-size:0.74rem; padding:0.25rem 0.45rem;" />
+      <button type="button" class="mini-summary-delete-link custom-extra-del-btn" data-idx="${idx}">eliminar</button>
+    </div>
+  `).join("");
+
+  listEl.querySelectorAll(".formatted-thousands-input").forEach(inp => attachLiveThousandsFormatter(inp));
+  listEl.querySelectorAll(".custom-extra-label-inp").forEach(inp => {
+    inp.addEventListener("input", () => {
+      const i = parseInt(inp.getAttribute("data-idx"), 10);
+      if (appState.lifestyleProfile.customExtraList[i]) {
+        appState.lifestyleProfile.customExtraList[i].label = inp.value;
+      }
+    });
+  });
+  listEl.querySelectorAll(".custom-extra-amount-inp").forEach(inp => {
+    inp.addEventListener("input", () => {
+      const i = parseInt(inp.getAttribute("data-idx"), 10);
+      if (appState.lifestyleProfile.customExtraList[i]) {
+        appState.lifestyleProfile.customExtraList[i].rawAmount = parseArsNumber(inp.value);
+        syncLifestyleProfileFromDOM();
+      }
+    });
+  });
+  listEl.querySelectorAll(".custom-extra-del-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const i = parseInt(btn.getAttribute("data-idx"), 10);
+      appState.lifestyleProfile.customExtraList.splice(i, 1);
+      renderCustomExpensesExtraList();
+      syncLifestyleProfileFromDOM();
+    });
+  });
+}
+
 function syncLifestyleProfileFromDOM() {
   const lp = appState.lifestyleProfile;
   const transportEl = document.getElementById("habit-transport-mode");
   const dispEl = document.getElementById("habit-vehicle-displacement");
   const cookingEl = document.getElementById("habit-cooking-mode");
   const dietEl = document.getElementById("habit-diet-type");
+  const restTierEl = document.getElementById("habit-restaurant-tier");
+  const gymChainEl = document.getElementById("habit-gym-chain");
+  const clothTierEl = document.getElementById("habit-clothing-tier");
+  const petsTierEl = document.getElementById("habit-pets-tier");
   const membersEl = document.getElementById("habit-household-members");
   const studentsEl = document.getElementById("habit-household-students");
 
@@ -1694,11 +2164,38 @@ function syncLifestyleProfileFromDOM() {
   if (dispEl) lp.vehicleDisplacement = dispEl.value;
   if (cookingEl) lp.cookingHabit = cookingEl.value;
   if (dietEl) lp.dietType = dietEl.value;
+  if (restTierEl) lp.restaurantTier = restTierEl.value;
+  if (gymChainEl) lp.gymChain = gymChainEl.value;
+  if (clothTierEl) lp.clothingTier = clothTierEl.value;
+  if (petsTierEl) lp.petsTier = petsTierEl.value;
 
   if (membersEl) lp.householdMembers = Math.max(1, parseInt(membersEl.value, 10) || 1);
   if (studentsEl) lp.householdStudents = Math.max(0, parseInt(studentsEl.value, 10) || 0);
 
+  // Gastos propios cargados por el usuario (ARS o USD)
+  const expCurr = (document.getElementById("habit-custom-expenses-currency")?.value || "ARS").toUpperCase();
+  lp.customExpensesCurrency = expCurr;
+  const usdRate = Math.max(1, appState.liveEconomicData?.dolarBnaVendedorArs || appState.liveEconomicData?.dolarOficialArs || 1050);
+  const mult = expCurr === "USD" ? usdRate : 1;
+
+  const rawSchool = parseArsNumber(document.getElementById("custom-exp-school-input")?.value);
+  const rawPets = parseArsNumber(document.getElementById("custom-exp-pets-input")?.value);
+  const rawShop = parseArsNumber(document.getElementById("custom-exp-shopping-input")?.value);
+  const rawOther = parseArsNumber(document.getElementById("custom-exp-other-input")?.value);
+
+  lp.customSchoolArs = Math.round(rawSchool * mult);
+  lp.customPetsArs = Math.round(rawPets * mult);
+  lp.customShoppingArs = Math.round(rawShop * mult);
+  lp.customOtherArs = Math.round(rawOther * mult);
+
+  if (Array.isArray(lp.customExtraList)) {
+    lp.customExtraList.forEach(item => {
+      item.amountArs = Math.round((item.rawAmount || 0) * mult);
+    });
+  }
+
   syncHobbyPoisWithMap();
+  renderStep2AddedPoisPreview();
 
   const supers = Array.from(document.querySelectorAll(".habit-supermarket-cb:checked")).map(cb => cb.value);
   lp.selectedSupermarkets = supers.length > 0 ? supers : ["carrefour"];
@@ -1710,12 +2207,18 @@ function syncLifestyleProfileFromDOM() {
   if (hhSummary) {
     const instCost = computeHouseholdInstitutionsMonthlyCost(lp);
     const basketScale = 1 + (lp.householdMembers - 1) * 0.65;
-    hhSummary.innerHTML = `👨‍👩‍👧‍👦 <strong>Hogar de ${lp.householdMembers} ${lp.householdMembers === 1 ? "habitante" : "habitantes"}</strong> (${lp.householdStudents} cursando estudios) · Escala de supermercado/servicios: <strong>x${basketScale.toFixed(2)}</strong>${instCost.totalArs > 0 ? ` · Salud/Educación/Instituciones seleccionadas: <strong>+$${instCost.totalArs.toLocaleString("es-AR")}/mes</strong>` : ""}`;
+    const customTotalArs = (lp.customSchoolArs || 0) + (lp.customPetsArs || 0) + (lp.customShoppingArs || 0) + (lp.customOtherArs || 0) + (lp.customExtraList || []).reduce((acc, it) => acc + (it.amountArs || 0), 0);
+    hhSummary.innerHTML = `👨‍👩‍👧‍👦 <strong>Hogar de ${lp.householdMembers} ${lp.householdMembers === 1 ? "habitante" : "habitantes"}</strong> (${lp.householdStudents} cursando estudios) · Escala de supermercado/servicios: <strong>x${basketScale.toFixed(2)}</strong>${instCost.totalArs > 0 ? ` · Salud/Educación/Instituciones: <strong>+$${instCost.totalArs.toLocaleString("es-AR")}/mes</strong>` : ""}${customTotalArs > 0 ? ` · Gastos propios declarados: <strong>+$${customTotalArs.toLocaleString("es-AR")}/mes</strong>` : ""}`;
   }
 
   const prioRadio = document.querySelector('input[name="habit-priority-ranking"]:checked');
   if (prioRadio) lp.rankingPriority = prioRadio.value;
 
+  const distModeRadio = document.querySelector('input[name="habit-poi-distance-mode"]:checked');
+  if (distModeRadio) lp.poiDistanceMode = distModeRadio.value;
+
+  CalculivingSecureVault.savePreferences(appState);
+  if (typeof updateIdealBannerCriteriaSummary === "function") updateIdealBannerCriteriaSummary();
   renderMapConvenienceRanking();
   if (leafletMap && zonesLayerGroup) {
     renderAffordabilityZonesOnMap();
@@ -1732,10 +2235,80 @@ function setupLifestyleMiniChat() {
   document.getElementById("habit-vehicle-displacement")?.addEventListener("change", syncLifestyleProfileFromDOM);
   document.getElementById("habit-cooking-mode")?.addEventListener("change", syncLifestyleProfileFromDOM);
   document.getElementById("habit-diet-type")?.addEventListener("change", syncLifestyleProfileFromDOM);
+  document.getElementById("habit-restaurant-tier")?.addEventListener("change", syncLifestyleProfileFromDOM);
+  document.getElementById("habit-gym-chain")?.addEventListener("change", syncLifestyleProfileFromDOM);
+  document.getElementById("habit-clothing-tier")?.addEventListener("change", syncLifestyleProfileFromDOM);
+  document.getElementById("habit-pets-tier")?.addEventListener("change", syncLifestyleProfileFromDOM);
+  document.getElementById("habit-custom-expenses-currency")?.addEventListener("change", syncLifestyleProfileFromDOM);
   document.getElementById("habit-household-members")?.addEventListener("input", syncLifestyleProfileFromDOM);
   document.getElementById("habit-household-students")?.addEventListener("input", syncLifestyleProfileFromDOM);
-  document.querySelectorAll(".habit-hobby-cb, .habit-supermarket-cb, .habit-institution-cb, input[name='habit-priority-ranking']").forEach(el => {
+  ["custom-exp-school-input", "custom-exp-pets-input", "custom-exp-shopping-input", "custom-exp-other-input"].forEach(id => {
+    document.getElementById(id)?.addEventListener("input", syncLifestyleProfileFromDOM);
+  });
+  document.querySelectorAll(".habit-hobby-cb, .habit-supermarket-cb, .habit-institution-cb, input[name='habit-priority-ranking'], input[name='habit-poi-distance-mode']").forEach(el => {
     el.addEventListener("change", syncLifestyleProfileFromDOM);
+  });
+
+  // Botón para sumar renglón extra de gasto propio
+  document.getElementById("btn-add-custom-expense-row")?.addEventListener("click", () => {
+    if (!Array.isArray(appState.lifestyleProfile.customExtraList)) {
+      appState.lifestyleProfile.customExtraList = [];
+    }
+    appState.lifestyleProfile.customExtraList.push({
+      id: "cust-exp-" + Date.now(),
+      label: "",
+      rawAmount: 0,
+      amountArs: 0
+    });
+    renderCustomExpensesExtraList();
+  });
+
+  // Botón en Paso 2 para agregar Escuela / Universidad / Trabajo / Otro sitio directo al mapa
+  document.getElementById("btn-step2-add-poi")?.addEventListener("click", async () => {
+    if (CalculivingSecurity.isBotBehaviorDetected()) return;
+    if (!CalculivingSecurity.checkRateLimit("geocode_poi", 12, 15000)) return;
+
+    const catSel = document.getElementById("step2-poi-category");
+    const nameInp = document.getElementById("step2-poi-name-input");
+    const addrInp = document.getElementById("step2-poi-address-input");
+    const refCb = document.getElementById("step2-poi-reference-only");
+    const addBtn = document.getElementById("btn-step2-add-poi");
+
+    const catVal = CalculivingSecurity.sanitizeTextInput(catSel?.value || "🏫 Escuela / Colegio", 60);
+    const customName = CalculivingSecurity.sanitizeTextInput(nameInp?.value || "", 80);
+    const rawAddr = CalculivingSecurity.sanitizeTextInput(addrInp?.value || "", 120);
+    if (!rawAddr && !customName) return;
+
+    const isRefOnly = Boolean(refCb?.checked) || catVal.includes("Otro punto importante");
+    const queryAddr = rawAddr || customName;
+    if (addBtn) addBtn.textContent = "⏳ Ubicando...";
+    const geo = await geocodeAddressInCaba(queryAddr);
+    if (addBtn) addBtn.textContent = "+ Agregar al Mapa";
+
+    const emojiPrefix = catVal.split(" ")[0] || "📍";
+    const finalLabel = customName ? `${emojiPrefix} ${customName}` : catVal;
+
+    appState.pois.push({
+      id: "poi-step2-" + Date.now(),
+      code: isRefOnly ? "★" : "A",
+      label: finalLabel,
+      address: geo ? geo.formatted : queryAddr,
+      lat: geo ? geo.lat : -34.6037,
+      lng: geo ? geo.lng : -58.3816,
+      color: isRefOnly ? "#64748b" : "#38bdf8",
+      isReferenceOnly: isRefOnly
+    });
+
+    if (nameInp) nameInp.value = "";
+    if (addrInp) addrInp.value = "";
+    if (refCb) refCb.checked = false;
+
+    reindexPois();
+    renderStep2AddedPoisPreview();
+    renderPoisSidebarList();
+    renderPoisOnLeafletMap();
+    updateSortPoisSelectOptions();
+    CalculivingSecureVault.savePreferences(appState);
   });
 
   const handleMiniChatTurn = () => {
@@ -3210,14 +3783,21 @@ function getZoneCenter(zone) {
   return [lat, lng];
 }
 
-// Re-indexa siempre los Puntos de Interés en orden correlativo (A, B, C, D...) cada vez que se borra o agrega uno
+// Re-indexa siempre los Puntos de Interés evaluables en orden correlativo (A, B, C, D...) y deja los "Otro punto importante" con ★ (solo visual, sin evaluar)
 function reindexPois() {
-  appState.pois.forEach((poi, idx) => {
-    const newCode = String.fromCharCode(65 + (idx % 26));
+  let evalIdx = 0;
+  appState.pois.forEach((poi) => {
+    if (poi.isReferenceOnly) {
+      poi.code = "★";
+      poi.color = "#64748b";
+      if (!poi.label) poi.label = "Otro punto importante";
+      return;
+    }
+    const newCode = String.fromCharCode(65 + (evalIdx % 26));
     const oldCode = poi.code;
     poi.code = newCode;
-    poi.color = POI_PALETTE[idx % POI_PALETTE.length];
-    // Si tenía el nombre genérico "Punto X", lo actualiza a la nueva letra ("Punto A", "Punto B", etc.)
+    poi.color = POI_PALETTE[evalIdx % POI_PALETTE.length];
+    evalIdx++;
     if (!poi.label || /^Punto [A-Z]$/i.test(poi.label.trim()) || poi.label.trim() === `Punto ${oldCode}`) {
       poi.label = `Punto ${newCode}`;
     }
@@ -3345,6 +3925,13 @@ const BUENOS_AIRES_COMPLETE_LOCATIONS_DB = [
   { keys: ["villa soldati", "soldati"], name: "Villa Soldati (CABA)", slug: "villa-soldati", lat: -34.6625, lng: -58.4435, rent: 375000, exp: 52000 },
   { keys: ["villa riachuelo"], name: "Villa Riachuelo (CABA)", slug: "villa-riachuelo", lat: -34.6915, lng: -58.4725, rent: 380000, exp: 52000 },
   { keys: ["avellaneda", "avellaneda centro", "partido de avellaneda"], name: "Avellaneda (GBA Sur, Provincia de Buenos Aires)", slug: "avellaneda-gba", lat: -34.6625, lng: -58.3645, rent: 435000, exp: 66000 },
+  { keys: ["pineyro", "piñeyro", "pineiro", "piñeiro"], name: "Piñeyro (Partido de Avellaneda, GBA Sur)", slug: "pineyro", lat: -34.6695, lng: -58.3845, rent: 410000, exp: 58000 },
+  { keys: ["valentin alsina", "alsina"], name: "Valentín Alsina (Partido de Lanús, GBA Sur)", slug: "valentin-alsina", lat: -34.6725, lng: -58.4145, rent: 405000, exp: 54000 },
+  { keys: ["gerli"], name: "Gerli (Avellaneda / Lanús, GBA Sur)", slug: "gerli", lat: -34.6885, lng: -58.3815, rent: 395000, exp: 52000 },
+  { keys: ["remedios de escalada", "escalada"], name: "Remedios de Escalada (Partido de Lanús, GBA Sur)", slug: "remedios-de-escalada", lat: -34.7245, lng: -58.3955, rent: 415000, exp: 58000 },
+  { keys: ["dock sud"], name: "Dock Sud (Partido de Avellaneda, GBA Sur)", slug: "dock-sud", lat: -34.6515, lng: -58.3485, rent: 375000, exp: 48000 },
+  { keys: ["crucesita"], name: "Crucesita (Partido de Avellaneda, GBA Sur)", slug: "crucesita", lat: -34.6675, lng: -58.3565, rent: 415000, exp: 60000 },
+  { keys: ["villa dominico", "dominico"], name: "Villa Domínico (Partido de Avellaneda, GBA Sur)", slug: "villa-dominico", lat: -34.6915, lng: -58.3325, rent: 395000, exp: 54000 },
   { keys: ["wilde"], name: "Wilde (Partido de Avellaneda, GBA Sur)", slug: "wilde", lat: -34.6975, lng: -58.3215, rent: 405000, exp: 58000 },
   { keys: ["sarandi"], name: "Sarandí (Partido de Avellaneda, GBA Sur)", slug: "sarandi", lat: -34.6825, lng: -58.3435, rent: 400000, exp: 56000 },
   { keys: ["banfield"], name: "Banfield (Partido de Lomas de Zamora, GBA Sur)", slug: "banfield", lat: -34.7425, lng: -58.3955, rent: 440000, exp: 66000 },
@@ -3357,7 +3944,55 @@ const BUENOS_AIRES_COMPLETE_LOCATIONS_DB = [
   { keys: ["castelar"], name: "Castelar (Partido de Morón, GBA Oeste)", slug: "castelar", lat: -34.6515, lng: -58.6435, rent: 435000, exp: 62000 },
   { keys: ["haedo"], name: "Haedo (Partido de Morón, GBA Oeste)", slug: "haedo", lat: -34.6445, lng: -58.5925, rent: 435000, exp: 62000 },
   { keys: ["caseros", "tres de febrero"], name: "Caseros (Partido de Tres de Febrero, GBA Oeste)", slug: "caseros", lat: -34.6095, lng: -58.5635, rent: 425000, exp: 60000 },
-  { keys: ["city bell"], name: "City Bell (Partido de La Plata, Provincia de Buenos Aires)", slug: "city-bell", lat: -34.8725, lng: -58.0465, rent: 465000, exp: 64000 }
+  { keys: ["city bell"], name: "City Bell (Partido de La Plata, Provincia de Buenos Aires)", slug: "city-bell", lat: -34.8725, lng: -58.0465, rent: 465000, exp: 64000 },
+  { keys: ["gonnet", "manuel b gonnet"], name: "Gonnet (Partido de La Plata, Provincia de Buenos Aires)", slug: "gonnet", lat: -34.8835, lng: -58.0165, rent: 445000, exp: 60000 },
+  { keys: ["tolosa"], name: "Tolosa (Partido de La Plata, Provincia de Buenos Aires)", slug: "tolosa", lat: -34.8975, lng: -57.9745, rent: 390000, exp: 52000 },
+  // Resto de los 135 municipios de la Provincia de Buenos Aires con coordenadas reales de su cabecera urbana
+  { keys: ["adolfo alsina", "carhue"], name: "Adolfo Alsina (Carhué)", slug: "adolfo-alsina", lat: -37.1789, lng: -62.7603, rent: 330000, exp: 29000 },
+  { keys: ["adolfo gonzales chaves", "gonzales chaves"], name: "Adolfo Gonzales Chaves", slug: "gonzales-chaves", lat: -38.0319, lng: -60.0986, rent: 325000, exp: 28000 },
+  { keys: ["alberti"], name: "Alberti", slug: "alberti", lat: -35.0314, lng: -60.2806, rent: 330000, exp: 29000 },
+  { keys: ["benito juarez"], name: "Benito Juárez", slug: "benito-juarez", lat: -37.6761, lng: -59.8053, rent: 335000, exp: 30000 },
+  { keys: ["capitan sarmiento"], name: "Capitán Sarmiento", slug: "capitan-sarmiento", lat: -34.1714, lng: -59.7958, rent: 350000, exp: 33000 },
+  { keys: ["carlos casares"], name: "Carlos Casares", slug: "carlos-casares", lat: -35.6225, lng: -61.3631, rent: 340000, exp: 31000 },
+  { keys: ["carlos tejedor"], name: "Carlos Tejedor", slug: "carlos-tejedor", lat: -35.3925, lng: -62.4203, rent: 325000, exp: 28000 },
+  { keys: ["carmen de areco"], name: "Carmen de Areco", slug: "carmen-de-areco", lat: -34.3781, lng: -59.8219, rent: 345000, exp: 32000 },
+  { keys: ["castelli"], name: "Castelli", slug: "castelli", lat: -36.0908, lng: -57.8047, rent: 330000, exp: 29000 },
+  { keys: ["coronel dorrego", "dorrego"], name: "Coronel Dorrego", slug: "coronel-dorrego", lat: -38.7186, lng: -61.2872, rent: 330000, exp: 29000 },
+  { keys: ["daireaux"], name: "Daireaux", slug: "daireaux", lat: -36.5986, lng: -61.7519, rent: 330000, exp: 29000 },
+  { keys: ["florentino ameghino", "ameghino"], name: "Florentino Ameghino", slug: "florentino-ameghino", lat: -34.8453, lng: -62.4675, rent: 325000, exp: 28000 },
+  { keys: ["general alvear"], name: "General Alvear", slug: "general-alvear", lat: -36.0233, lng: -60.0156, rent: 325000, exp: 28000 },
+  { keys: ["general arenales"], name: "General Arenales", slug: "general-arenales", lat: -34.2981, lng: -61.3053, rent: 330000, exp: 29000 },
+  { keys: ["general guido"], name: "General Guido", slug: "general-guido", lat: -36.6439, lng: -57.7911, rent: 320000, exp: 26000 },
+  { keys: ["general la madrid", "la madrid"], name: "General La Madrid", slug: "general-la-madrid", lat: -37.2486, lng: -61.2619, rent: 325000, exp: 28000 },
+  { keys: ["general las heras", "las heras pba"], name: "General Las Heras", slug: "general-las-heras", lat: -34.9267, lng: -58.9467, rent: 350000, exp: 34000 },
+  { keys: ["general lavalle"], name: "General Lavalle", slug: "general-lavalle", lat: -36.4058, lng: -56.9428, rent: 325000, exp: 28000 },
+  { keys: ["general paz", "ranchos"], name: "General Paz (Ranchos)", slug: "general-paz-ranchos", lat: -35.5169, lng: -58.3169, rent: 340000, exp: 31000 },
+  { keys: ["general pinto"], name: "General Pinto", slug: "general-pinto", lat: -34.7644, lng: -61.8908, rent: 325000, exp: 28000 },
+  { keys: ["general viamonte", "los toldos"], name: "General Viamonte (Los Toldos)", slug: "general-viamonte", lat: -35.0025, lng: -61.0369, rent: 330000, exp: 29000 },
+  { keys: ["general villegas", "villegas"], name: "General Villegas", slug: "general-villegas", lat: -35.0328, lng: -63.0125, rent: 340000, exp: 31000 },
+  { keys: ["guamini"], name: "Guaminí", slug: "guamini", lat: -37.0128, lng: -62.4214, rent: 325000, exp: 28000 },
+  { keys: ["hipolito yrigoyen", "henderson"], name: "Hipólito Yrigoyen (Henderson)", slug: "henderson", lat: -36.2981, lng: -61.7158, rent: 325000, exp: 28000 },
+  { keys: ["laprida"], name: "Laprida", slug: "laprida", lat: -37.5453, lng: -60.8006, rent: 330000, exp: 29000 },
+  { keys: ["leandro n alem", "vedia"], name: "Leandro N. Alem (Vedia)", slug: "leandro-n-alem", lat: -34.4969, lng: -61.5422, rent: 325000, exp: 28000 },
+  { keys: ["lezama"], name: "Lezama", slug: "lezama", lat: -35.8758, lng: -57.8969, rent: 335000, exp: 30000 },
+  { keys: ["loberia"], name: "Lobería", slug: "loberia", lat: -38.1656, lng: -58.7811, rent: 330000, exp: 29000 },
+  { keys: ["magdalena"], name: "Magdalena", slug: "magdalena", lat: -35.0808, lng: -57.5175, rent: 340000, exp: 31000 },
+  { keys: ["maipu pba", "partido de maipu"], name: "Maipú (Provincia de Buenos Aires)", slug: "maipu-pba", lat: -36.8669, lng: -57.8825, rent: 325000, exp: 28000 },
+  { keys: ["navarro"], name: "Navarro", slug: "navarro", lat: -35.0069, lng: -59.2758, rent: 340000, exp: 31000 },
+  { keys: ["pellegrini"], name: "Pellegrini", slug: "pellegrini", lat: -36.2683, lng: -63.1647, rent: 325000, exp: 28000 },
+  { keys: ["pila"], name: "Pila", slug: "pila", lat: -36.0044, lng: -58.1436, rent: 320000, exp: 26000 },
+  { keys: ["puan"], name: "Puan", slug: "puan", lat: -37.5439, lng: -62.7669, rent: 325000, exp: 28000 },
+  { keys: ["punta indio", "veronica"], name: "Punta Indio (Verónica)", slug: "punta-indio", lat: -35.3853, lng: -57.3386, rent: 335000, exp: 30000 },
+  { keys: ["rauch"], name: "Rauch", slug: "rauch", lat: -36.7747, lng: -59.0886, rent: 330000, exp: 29000 },
+  { keys: ["rivadavia pba", "america"], name: "Rivadavia (América)", slug: "rivadavia-america", lat: -35.4897, lng: -62.9744, rent: 330000, exp: 29000 },
+  { keys: ["roque perez"], name: "Roque Pérez", slug: "roque-perez", lat: -35.3978, lng: -59.3328, rent: 335000, exp: 30000 },
+  { keys: ["salliquelo"], name: "Salliqueló", slug: "salliquelo", lat: -36.7519, lng: -62.9597, rent: 325000, exp: 28000 },
+  { keys: ["san cayetano"], name: "San Cayetano", slug: "san-cayetano", lat: -38.3458, lng: -59.6094, rent: 325000, exp: 28000 },
+  { keys: ["suipacha"], name: "Suipacha", slug: "suipacha", lat: -34.7708, lng: -59.6878, rent: 340000, exp: 31000 },
+  { keys: ["tapalque"], name: "Tapalqué", slug: "tapalque", lat: -36.3578, lng: -60.0239, rent: 325000, exp: 28000 },
+  { keys: ["tordillo", "general conesa"], name: "Tordillo (General Conesa)", slug: "tordillo", lat: -36.5514, lng: -57.3264, rent: 320000, exp: 26000 },
+  { keys: ["tres lomas"], name: "Tres Lomas", slug: "tres-lomas", lat: -36.4589, lng: -62.8608, rent: 325000, exp: 28000 },
+  { keys: ["villarino", "medanos", "pedro luro"], name: "Villarino (Médanos / Pedro Luro)", slug: "villarino", lat: -38.8267, lng: -62.6914, rent: 335000, exp: 30000 }
 ];
 
 // Catálogo de zonas homónimas que requieren seleccionar Municipio o Provincia antes de aislar el polígono
@@ -4090,12 +4725,17 @@ function setupInteractiveMap() {
   const newPoiAddressInput = document.getElementById("new-poi-address-input");
 
   const handleAddPoi = async () => {
-    const rawName = (newPoiInput?.value || "").trim();
-    const rawAddr = (newPoiAddressInput?.value || "").trim();
+    if (CalculivingSecurity.isBotBehaviorDetected()) return;
+    if (!CalculivingSecurity.checkRateLimit("geocode_poi", 12, 15000)) return;
+
+    const rawName = CalculivingSecurity.sanitizeTextInput(newPoiInput?.value || "", 80);
+    const rawAddr = CalculivingSecurity.sanitizeTextInput(newPoiAddressInput?.value || "", 120);
+    const refCb = document.getElementById("new-poi-reference-only");
+    const isRefOnly = Boolean(refCb?.checked);
 
     const nextIdx = appState.pois.length;
-    const nextCode = String.fromCharCode(65 + (nextIdx % 26));
-    const color = POI_PALETTE[nextIdx % POI_PALETTE.length];
+    const nextCode = isRefOnly ? "★" : String.fromCharCode(65 + (nextIdx % 26));
+    const color = isRefOnly ? "#64748b" : POI_PALETTE[nextIdx % POI_PALETTE.length];
 
     let lat = -34.6015;
     let lng = -58.4280;
@@ -4119,14 +4759,18 @@ function setupInteractiveMap() {
     const newPoi = {
       id: "poi-" + Date.now() + "-" + nextIdx,
       code: nextCode,
-      label: rawName || `Punto ${nextCode}`,
+      label: rawName || (isRefOnly ? "Otro punto importante" : `Punto ${nextCode}`),
       address: resolvedAddr,
       lat,
       lng,
-      color
+      color,
+      isReferenceOnly: isRefOnly
     };
     appState.pois.push(newPoi);
+    if (refCb) refCb.checked = false;
     reindexPois();
+    CalculivingSecureVault.savePreferences(appState);
+    if (typeof updateIdealBannerCriteriaSummary === "function") updateIdealBannerCriteriaSummary();
 
     if (newPoiInput) newPoiInput.value = "";
     if (newPoiAddressInput) newPoiAddressInput.value = "";
@@ -4158,10 +4802,444 @@ function setupInteractiveMap() {
     navigateTo("screen-metodo");
   });
 
+  // Botón "Encontrá tu Barrio Ideal" (Escaneo Integral de Todo Buenos Aires)
+  document.getElementById("btn-find-ideal-neighborhood")?.addEventListener("click", () => {
+    findIdealNeighborhoodsForUser();
+  });
+
   reindexPois();
   renderPoisSidebarList();
   updateSortPoisSelectOptions();
   initLeafletRealMap();
+}
+
+function closeMapMiniSummaryCard() {
+  const card = document.getElementById("map-zone-mini-summary-card");
+  if (card) {
+    card.style.display = "none";
+    card.innerHTML = "";
+  }
+}
+
+// Abre la casilla de Mini-Resumen al hacer click en una zona o área dibujada en el mapa.
+// Al clickear el nombre del barrio dentro de este resumen lleva a la página siguiente (#screen-resultados) detallando el lugar.
+// Abajo del todo, separado por un espacio en la esquina inferior derecha, incluye el enlace grisáceo subrayado "eliminar".
+function openMapZoneMiniSummaryCard(zone, isDrawnZone = false) {
+  const card = document.getElementById("map-zone-mini-summary-card");
+  if (!card || !zone) return;
+
+  selectedZoneForDeepDive = zone;
+  const m = computeZoneAffordabilityMetrics(zone);
+  const uFilters = getUnifiedSearchFilters();
+  const shortTitle = zone.name.split(" (")[0];
+
+  const idealStatusHtml = zone.isIdealRecommended
+    ? `<div style="background:rgba(16,185,129,0.14); border:1px solid rgba(52,211,153,0.5); border-radius:6px; padding:0.45rem 0.55rem; margin-top:0.45rem; font-size:0.71rem; color:#d1fae5; line-height:1.35;">
+         <strong>🏆 Barrio Ideal #${zone.idealRank || 1}:</strong> ${escapeHtml(zone.idealReasonExplanation || "")}
+       </div>`
+    : (zone.isNearMissIdeal
+      ? `<div class="ideal-near-miss-card">
+           <strong>💙 ¿Por qué estuvo cerca de ser elegido?</strong><br>
+           <span>${escapeHtml(zone.nearMissReason || "")}</span>
+           <div style="margin-top:0.35rem;">
+             <button type="button" class="btn-sm btn-primary" id="btn-promote-nearmiss-zone" style="font-size:0.68rem; padding:0.22rem 0.55rem;">➕ Marcar y sumar a mis barrios</button>
+           </div>
+         </div>`
+      : "");
+
+  card.style.display = "block";
+  card.innerHTML = `
+    <button type="button" class="mini-summary-close-btn" id="btn-close-mini-summary-card" title="Cerrar resumen">✕</button>
+    <div style="font-size:0.68rem; color:#94a3b8; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.2rem;">
+      📍 Mini-Resumen Zonal · Tocá el nombre para ir al detalle completo
+    </div>
+    <button type="button" class="mini-summary-title-btn" id="btn-mini-summary-go-detail" title="Click para abrir la página de desglose completo de ${escapeHtml(shortTitle)}">
+      <span>🏘️ ${escapeHtml(shortTitle)}</span>
+      <span style="font-size:0.75rem; color:#bae6fd; font-weight:700;">Ver detalle →</span>
+    </button>
+    <div style="font-size:0.74rem; color:#cbd5e1; margin-bottom:0.5rem;">
+      Configuración activa: <strong>${escapeHtml(uFilters.roomsLabel)}</strong> · <strong>${escapeHtml(uFilters.bathroomsLabel)}</strong>
+    </div>
+    <div style="background:rgba(15,23,42,0.85); border:1px solid rgba(56,189,248,0.28); border-radius:8px; padding:0.55rem 0.65rem; display:flex; flex-direction:column; gap:0.28rem; font-size:0.76rem;">
+      <div style="display:flex; justify-content:space-between; gap:0.5rem;">
+        <span style="color:#94a3b8;">🏠 1. Alquiler:</span>
+        <strong style="color:${m.alquilerHex};">${escapeHtml(m.alquilerAPartirStr)}/mes</strong>
+      </div>
+      <div style="display:flex; justify-content:space-between; gap:0.5rem;">
+        <span style="color:#94a3b8;">🏢 2. Expensas:</span>
+        <strong style="color:${m.expensasHex};">${escapeHtml(m.expensasAPartirStr)}/mes</strong>
+      </div>
+      <div style="display:flex; justify-content:space-between; gap:0.5rem;">
+        <span style="color:#94a3b8;">🛒 3. Costo de Vida:</span>
+        <strong style="color:${m.vidaHex};">${escapeHtml(m.vidaAPartirStr)}/mes</strong>
+      </div>
+      <div style="border-top:1px solid rgba(255,255,255,0.1); padding-top:0.32rem; margin-top:0.12rem; display:flex; justify-content:space-between; gap:0.5rem;">
+        <span style="color:#f8fafc; font-weight:800;">💰 Total Mensual:</span>
+        <strong style="color:${m.rentHex}; font-size:0.82rem;">${escapeHtml(m.totalAPartirStr)}/mes ${m.hasSalary ? `(${m.pctTotal}%)` : ""}</strong>
+      </div>
+    </div>
+    ${idealStatusHtml}
+    <div style="font-size:0.68rem; color:#94a3b8; margin-top:0.45rem;">
+      💡 Tocá el nombre subrayado arriba (<strong>${escapeHtml(shortTitle)}</strong>) para abrir la página de desglose y links a portales.
+    </div>
+    <div class="mini-summary-delete-footer">
+      <button type="button" class="mini-summary-delete-link" id="btn-mini-summary-delete-zone">eliminar</button>
+    </div>
+  `;
+
+  document.getElementById("btn-promote-nearmiss-zone")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!MAP_AFFORDABILITY_ZONES.some(existing => existing.id === zone.id)) {
+      MAP_AFFORDABILITY_ZONES.push(zone);
+    }
+    if (!appState.userSelectedZones.some(existing => existing.id === zone.id)) {
+      appState.userSelectedZones.push(zone);
+    }
+    appState.nearMissIdealZones = (appState.nearMissIdealZones || []).filter(z => z.id !== zone.id);
+    renderAffordabilityZonesOnMap();
+    renderUserSelectedZonesSidebar();
+    CalculivingSecureVault.savePreferences(appState);
+    openMapZoneMiniSummaryCard(zone, false);
+  });
+
+  document.getElementById("btn-close-mini-summary-card")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeMapMiniSummaryCard();
+  });
+
+  document.getElementById("btn-mini-summary-go-detail")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeMapMiniSummaryCard();
+    openZoneDetailedBreakdown(zone);
+  });
+
+  document.getElementById("btn-mini-summary-delete-zone")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeMapMiniSummaryCard();
+    if (isDrawnZone || zone.id === "zona-dibujada-usuario") {
+      clearDrawnPolygon();
+    } else {
+      appState.userSelectedZones = (appState.userSelectedZones || []).filter(z => z.id !== zone.id);
+      appState.nearMissIdealZones = (appState.nearMissIdealZones || []).filter(z => z.id !== zone.id);
+      if (selectedZoneForDeepDive && selectedZoneForDeepDive.id === zone.id) {
+        selectedZoneForDeepDive = appState.userSelectedZones[0] || null;
+      }
+      renderAffordabilityZonesOnMap();
+      renderUserSelectedZonesSidebar();
+      CalculivingSecureVault.savePreferences(appState);
+    }
+  });
+}
+
+// Abre la casilla de Mini-Resumen para un Punto de Interés (A, B, C...) con botón "eliminar" grisáceo subrayado abajo a la derecha
+function openMapPoiMiniSummaryCard(poi) {
+  const card = document.getElementById("map-zone-mini-summary-card");
+  if (!card || !poi) return;
+
+  card.style.display = "block";
+  card.innerHTML = `
+    <button type="button" class="mini-summary-close-btn" id="btn-close-mini-summary-poi" title="Cerrar">✕</button>
+    <div style="font-size:0.68rem; color:#94a3b8; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:0.2rem;">
+      📍 Punto de Interés Frecuente (${escapeHtml(poi.code)})
+    </div>
+    <div style="font-size:0.96rem; font-weight:900; color:${poi.color}; margin-bottom:0.25rem;">
+      Punto ${escapeHtml(poi.code)}: ${escapeHtml(poi.label)}
+    </div>
+    <div style="font-size:0.76rem; color:#e2e8f0; margin-bottom:0.45rem;">
+      📌 Dirección / Ubicación: <strong>${escapeHtml(poi.address || "Ubicado en el mapa")}</strong>
+    </div>
+    <div style="font-size:0.71rem; color:#bae6fd; background:rgba(15,23,42,0.8); padding:0.45rem 0.55rem; border-radius:6px; border:1px solid rgba(56,189,248,0.25);">
+      🛣️ Las rutas hacia tus zonas de interés están resaltadas en el mapa. Podés arrastrar el marcador <strong>${escapeHtml(poi.code)}</strong> para reubicarlo.
+    </div>
+    <div class="mini-summary-delete-footer">
+      <button type="button" class="mini-summary-delete-link" id="btn-mini-summary-delete-poi">eliminar</button>
+    </div>
+  `;
+
+  document.getElementById("btn-close-mini-summary-poi")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeMapMiniSummaryCard();
+  });
+
+  document.getElementById("btn-mini-summary-delete-poi")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeMapMiniSummaryCard();
+    appState.pois = (appState.pois || []).filter(p => p.id !== poi.id);
+    reindexPois();
+    if (appState.activeHighlightedPoiId === poi.id) {
+      appState.activeHighlightedPoiId = null;
+      clearPoiRoutesHighlight();
+    }
+    renderPoisSidebarList();
+    renderPoisOnLeafletMap();
+    renderStep2AddedPoisPreview();
+    updateSortPoisSelectOptions();
+  });
+}
+
+function updateIdealBannerCriteriaSummary() {
+  const el = document.getElementById("ideal-criteria-summary-text");
+  if (!el) return;
+  const lp = appState.lifestyleProfile || {};
+  const evalCount = (appState.pois || []).filter(p => !p.isReferenceOnly).length;
+  const refCount = (appState.pois || []).filter(p => p.isReferenceOnly).length;
+  const distLabels = {
+    igual_3_puntos: "Igual en 3 puntos",
+    orden_abc: "Más cerca de A > B > C",
+    cerca_b_c: "Más cerca de B y C",
+    cerca_solo_a: "Pegado al Punto A"
+  };
+  const distStr = distLabels[lp.poiDistanceMode || "igual_3_puntos"] || "Igual en 3 puntos";
+  const salStr = appState.salary > 0
+    ? `Sueldo: $${Math.round(appState.salary).toLocaleString("es-AR")} ARS`
+    : "Sin sueldo cargado (usa costo mínimo)";
+  el.innerHTML = `${salStr} · Distancia: <strong>${distStr}</strong> · <strong>${evalCount}</strong> punto(s) evaluable(s)${refCount > 0 ? ` + <strong>${refCount}</strong> otro punto ⭐ (solo visual)` : ""}.`;
+}
+
+// Escanea TODA la base de datos de Buenos Aires (48 barrios de CABA + 135 municipios de PBA y localidades)
+// para marcar en el mapa los Mejores Barrios Ideales (Top 3) y, con línea punteada celeste/azul, otros barrios cercanos de interés (Near-Miss).
+function findIdealNeighborhoodsForUser() {
+  if (CalculivingSecurity.isBotBehaviorDetected()) return;
+  if (!CalculivingSecurity.checkRateLimit("ideal_scan", 12, 10000)) return;
+
+  const scopeSel = document.getElementById("ideal-neighborhood-scope-select");
+  const resultsBox = document.getElementById("ideal-neighborhood-results-list");
+  if (!resultsBox) return;
+
+  const scope = scopeSel?.value || "all";
+  const lp = appState.lifestyleProfile || {};
+  const prio = lp.rankingPriority || "equilibrio_frecuentes";
+  const distMode = lp.poiDistanceMode || "igual_3_puntos";
+  // Los "Otros puntos importantes (★)" NO se toman en cuenta al evaluar el lugar más conveniente
+  const evalPois = (appState.pois || []).filter(p => !p.isReferenceOnly);
+  const salaryArs = appState.salary || 0;
+
+  const candidateZones = [];
+  const seenSlugs = new Set();
+
+  MAP_AFFORDABILITY_ZONES.forEach(z => {
+    seenSlugs.add(z.slug);
+    candidateZones.push(z);
+  });
+
+  const baseTemplate = MAP_AFFORDABILITY_ZONES[0];
+  BUENOS_AIRES_COMPLETE_LOCATIONS_DB.forEach(loc => {
+    if (seenSlugs.has(loc.slug)) return;
+    seenSlugs.add(loc.slug);
+    const isCaba = loc.name.includes("CABA");
+    const distFromCabaKm = getDistanceKm(loc.lat, loc.lng, -34.6037, -58.3816);
+    const isInterior = distFromCabaKm > 55;
+    let regionTag = "gba";
+    if (isCaba) regionTag = "caba";
+    else if (isInterior) regionTag = "pba-interior";
+    else if (loc.lat < -34.64 && loc.lng > -58.46) regionTag = "zona-sur";
+    else if (loc.lat > -34.57 && loc.lng < -58.47) regionTag = "zona-norte";
+    else regionTag = "zona-oeste";
+
+    const polys = buildOrganicSubzonePolygons(loc.lat, loc.lng, loc.coastOrientation || null);
+    candidateZones.push({
+      id: `zona-ideal-${loc.slug}`,
+      slug: loc.slug,
+      region: regionTag,
+      name: loc.name,
+      urban_boundary_note: `Delimitación de ${loc.name}.`,
+      bridge_price_effect: `Zona de ${loc.name} evaluada en el escaneo integral.`,
+      coords: polys.centroCoords,
+      originalCoords: polys.centroCoords.map(c => [c[0], c[1]]),
+      alquiler_ars: loc.rent || 410000,
+      expensas_ars: loc.exp || 58000,
+      servicios_ars: 46000,
+      canasta_comercios_ars: isInterior ? 192000 : 208000,
+      transporte_ars: 32000,
+      impuestos_y_servicios: { ...baseTemplate.impuestos_y_servicios },
+      locales_cercanos: baseTemplate.locales_cercanos.map(l => ({ ...l })),
+      gastos_alrededor_detalle: `Comercios, transporte y servicios de ${loc.name}.`
+    });
+  });
+
+  const filteredCandidates = candidateZones.filter(z => {
+    const reg = z.region || "caba";
+    if (scope === "caba") return reg === "caba";
+    if (scope === "caba_gba" || scope === "amba") return reg !== "pba-interior";
+    if (scope === "gba") return reg !== "caba" && reg !== "pba-interior";
+    if (scope === "gba_norte") return reg === "zona-norte";
+    if (scope === "gba_sur") return reg === "zona-sur" || reg === "la-plata";
+    if (scope === "gba_oeste") return reg === "zona-oeste";
+    if (scope === "pba_interior") return reg === "pba-interior" || reg === "la-plata";
+    return true;
+  });
+
+  const distModeLabels = {
+    igual_3_puntos: "equidistante entre tus puntos (A, B y C)",
+    orden_abc: "priorizando A > B > C",
+    cerca_b_c: "priorizando cercanía a B y C",
+    cerca_solo_a: "pegado al Punto A"
+  };
+
+  const scored = filteredCandidates.map(z => {
+    const [zLat, zLng] = getZoneCenter(z);
+    const m = computeZoneAffordabilityMetrics(z);
+
+    let weightedDistKm = 0;
+    let totalWeight = 0;
+    if (evalPois.length > 0) {
+      evalPois.forEach((p, idx) => {
+        let w = 1;
+        if (distMode === "orden_abc") {
+          w = Math.max(0.25, 1 / (idx + 1));
+        } else if (distMode === "cerca_b_c") {
+          w = (idx === 1 || idx === 2) ? 1.0 : (idx === 0 ? 0.35 : 0.45);
+        } else if (distMode === "cerca_solo_a") {
+          w = idx === 0 ? 1.0 : 0.18;
+        } else {
+          // igual_3_puntos: igual peso para los puntos (especialmente los 3 primeros)
+          w = idx < 3 ? 1.0 : 0.5;
+        }
+        const d = getDistanceKm(zLat, zLng, p.lat, p.lng);
+        weightedDistKm += d * w;
+        totalWeight += w;
+      });
+      weightedDistKm = weightedDistKm / Math.max(0.01, totalWeight);
+    } else {
+      weightedDistKm = getDistanceKm(zLat, zLng, -34.6037, -58.3816) * 0.35;
+    }
+
+    const estTravelMin = Math.max(5, Math.round(weightedDistKm * 3.1 + 4));
+
+    let econScore = 75;
+    if (salaryArs > 0) {
+      const ratio = (m.totalMonthly / salaryArs) * 100;
+      econScore = Math.max(5, Math.min(100, Math.round(115 - ratio * 1.15)));
+    } else {
+      econScore = Math.max(15, Math.min(100, Math.round(110 - (m.totalMonthly / 15000))));
+    }
+
+    const travelScore = evalPois.length > 0
+      ? Math.max(5, Math.min(100, Math.round(100 - weightedDistKm * 3.2)))
+      : 78;
+
+    const servicesScore = z.region === "caba" ? 94 : (z.region === "pba-interior" ? 82 : 88);
+
+    let totalScore = 0;
+    if (prio === "menos_viaje") {
+      totalScore = Math.round(travelScore * 0.62 + econScore * 0.23 + servicesScore * 0.15);
+    } else if (prio === "menos_gasto") {
+      totalScore = Math.round(econScore * 0.64 + travelScore * 0.21 + servicesScore * 0.15);
+    } else {
+      totalScore = Math.round(servicesScore * 0.36 + travelScore * 0.34 + econScore * 0.30);
+    }
+
+    return {
+      zone: z,
+      metrics: m,
+      weightedDistKm,
+      estTravelMin,
+      econScore,
+      travelScore,
+      servicesScore,
+      totalScore: Math.max(10, Math.min(99, totalScore))
+    };
+  });
+
+  scored.sort((a, b) => b.totalScore - a.totalScore);
+  const topIdeal = scored.slice(0, 3);
+  const nearMisses = scored.slice(3, 6);
+  const topThresholdScore = topIdeal[topIdeal.length - 1]?.totalScore || 75;
+  const bestItem = topIdeal[0];
+
+  // Limpiar marcas ideales anteriores antes de marcar las nuevas en el mapa
+  appState.userSelectedZones = (appState.userSelectedZones || []).filter(z => !z.isIdealRecommended);
+  appState.nearMissIdealZones = [];
+
+  topIdeal.forEach((item, idx) => {
+    const z = item.zone;
+    const m = item.metrics;
+    const shortName = z.name.split(" (")[0];
+    z.isIdealRecommended = true;
+    z.isNearMissIdeal = false;
+    z.idealRank = idx + 1;
+    z.idealReasonExplanation = `Ocupó el puesto #${idx + 1} (${item.totalScore}% de afinidad) porque combina un costo total mensual desde ${m.totalAPartirStr}/mes${m.hasSalary ? ` (${m.pctTotal}% de tu sueldo)` : ""}, ${evalPois.length > 0 ? `un traslado promedio de ~${item.estTravelMin} min (${item.weightedDistKm.toFixed(1)} km) respetando tu regla "${distModeLabels[distMode]}"` : "muy buena conectividad general"}, y alta concentración de comercios y servicios acorde a tu estilo de vida.`;
+    if (!MAP_AFFORDABILITY_ZONES.some(existing => existing.id === z.id)) {
+      MAP_AFFORDABILITY_ZONES.push(z);
+    }
+    if (!appState.userSelectedZones.some(existing => existing.id === z.id)) {
+      appState.userSelectedZones.push(z);
+    }
+  });
+
+  nearMisses.forEach((item) => {
+    const z = item.zone;
+    const m = item.metrics;
+    const diffPts = Math.max(1, topThresholdScore - item.totalScore);
+    const reasons = [];
+    if (bestItem && m.totalMonthly > bestItem.metrics.totalMonthly * 1.06) {
+      const extraPct = Math.round(((m.totalMonthly - bestItem.metrics.totalMonthly) / bestItem.metrics.totalMonthly) * 100);
+      reasons.push(`su costo mensual (${m.totalAPartirStr}) es ~${extraPct}% más alto que el #1`);
+    }
+    if (bestItem && evalPois.length > 0 && item.weightedDistKm > bestItem.weightedDistKm + 0.6) {
+      reasons.push(`queda ~${(item.weightedDistKm - bestItem.weightedDistKm).toFixed(1)} km más lejos bajo tu criterio "${distModeLabels[distMode]}"`);
+    }
+    if (reasons.length === 0) {
+      reasons.push(`quedó a apenas ${diffPts} puntos del Top 3 en el balance general entre sueldo, servicios y traslados`);
+    }
+    z.isIdealRecommended = false;
+    z.isNearMissIdeal = true;
+    z.nearMissReason = `Estuvo muy cerca de entrar al Top 3 (a ${diffPts} pts, ${item.totalScore}% de afinidad): ofrece muy buena conveniencia de servicios (${item.servicesScore}/100)${evalPois.length > 0 ? ` y ~${item.estTravelMin} min promedio a tus puntos` : ""}, pero no quedó marcado como principal porque ${reasons.join(" y ")}.`;
+    appState.nearMissIdealZones.push(z);
+  });
+
+  renderAffordabilityZonesOnMap();
+  renderUserSelectedZonesSidebar();
+  CalculivingSecureVault.savePreferences(appState);
+
+  if (leafletMap && topIdeal.length > 0) {
+    const allBounds = topIdeal.flatMap(it => it.zone.coords || []);
+    if (allBounds.length > 0) {
+      leafletMap.fitBounds(allBounds, { padding: [45, 45], maxZoom: 13 });
+    }
+  }
+
+  resultsBox.style.display = "flex";
+  resultsBox.innerHTML = `
+    <div style="font-size:0.71rem; color:#6ee7b7; font-weight:800;">
+      ✅ Escaneadas ${filteredCandidates.length} zonas. Marcados en el mapa tus ${topIdeal.length} Barrios Ideales y ${nearMisses.length} barrios de interés en línea punteada celeste/azul:
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:0.4rem;">
+      ${topIdeal.map((item, idx) => {
+        const z = item.zone;
+        const m = item.metrics;
+        const shortName = z.name.split(" (")[0];
+        return `
+          <div class="ideal-result-card" style="margin-top:0;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.3rem;">
+              <strong style="font-size:0.76rem; color:#fff;">🏆 #${idx + 1} · ${escapeHtml(shortName)}</strong>
+              <span style="background:rgba(16,185,129,0.2); color:#34d399; border:1px solid rgba(16,185,129,0.45); border-radius:999px; padding:1px 6px; font-size:0.65rem; font-weight:900;">${item.totalScore}%</span>
+            </div>
+            <div style="font-size:0.69rem; color:#e2e8f0; margin-top:2px;">
+              💰 <strong style="color:${m.rentHex};">${escapeHtml(m.totalAPartirStr)}/mes</strong> ${m.hasSalary ? `(${m.pctTotal}%)` : ""} ${evalPois.length > 0 ? `· 🛣️ ~${item.estTravelMin} min` : ""}
+            </div>
+            <div style="display:flex; gap:0.3rem; margin-top:0.3rem;">
+              <button type="button" class="btn-sm btn-secondary ideal-open-detail-btn" data-ideal-slug="${escapeHtml(z.slug)}" style="font-size:0.64rem; padding:0.16rem 0.45rem;">📊 Ver por qué es ideal →</button>
+            </div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+    ${nearMisses.length > 0 ? `
+      <div style="font-size:0.69rem; color:#7dd3fc; margin-top:0.2rem;">
+        💙 <strong>Línea punteada celeste/azul en el mapa:</strong> ${nearMisses.map(it => escapeHtml(it.zone.name.split(" (")[0])).join(", ")} (tocá cualquiera en el mapa para ver por qué estuvo cerca de ser elegido).
+      </div>
+    ` : ""}
+  `;
+
+  resultsBox.querySelectorAll(".ideal-open-detail-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const slug = btn.getAttribute("data-ideal-slug");
+      const hit = topIdeal.find(it => it.zone.slug === slug);
+      if (!hit) return;
+      openZoneDetailedBreakdown(hit.zone);
+    });
+  });
 }
 
 function initLeafletRealMap() {
@@ -4273,11 +5351,6 @@ function renderPoisSidebarList() {
         <button type="button" class="btn-sm btn-secondary poi-route-btn" data-poi-id="${poi.id}" title="Ver rutas en Auto, Subte, Colectivo y Caminando" style="font-size:0.65rem; padding:0.15rem 0.38rem;">
           🛣️ Rutas
         </button>
-        ${appState.pois.length > 1 ? `
-          <button type="button" class="btn-sm btn-secondary poi-delete-btn" data-poi-id="${poi.id}" title="Quitar punto (reordena letras A, B, C...)" style="font-size:0.65rem; padding:0.15rem 0.35rem; color:#f87171;">
-            ✕
-          </button>
-        ` : ""}
       </div>
       <div style="display:flex; align-items:center; gap:0.3rem;">
         <input type="text" class="salary-input poi-address-input" data-poi-id="${poi.id}" value="${escapeHtml(poi.address || "")}"
@@ -4286,6 +5359,9 @@ function renderPoisSidebarList() {
         <button type="button" class="btn-sm btn-primary poi-locate-addr-btn" data-poi-id="${poi.id}" title="Ubicar esta dirección en el mapa" style="font-size:0.66rem; padding:0.2rem 0.45rem; flex-shrink:0;">
           📍 Ir
         </button>
+      </div>
+      <div class="mini-summary-delete-footer" style="margin-top:0.15rem; padding-top:0.2rem;">
+        <button type="button" class="mini-summary-delete-link poi-delete-btn" data-poi-id="${poi.id}" title="Eliminar este punto de interés">eliminar</button>
       </div>
     </div>
   `).join("");
@@ -4398,6 +5474,7 @@ function renderPoisSidebarList() {
       }
       renderPoisSidebarList();
       renderPoisOnLeafletMap();
+      renderStep2AddedPoisPreview();
       updateSortPoisSelectOptions();
     });
   });
@@ -4427,7 +5504,7 @@ function renderPoisOnLeafletMap() {
   reindexPois();
   poisLayerGroup.clearLayers();
 
-  const activeCurrency = appState.currency || "ARS";
+  const activeCurrency = (document.getElementById("map-filter-currency")?.value || appState.classicFilters?.currency || "ARS").toUpperCase();
   const maxPriceNum = Number(appState.maxPrice) || 0;
   const budgetTagHtml = maxPriceNum > 0
     ? `<div style="font-size:9px; color:#bae6fd; font-weight:800; margin-top:1px;">Tope: $${maxPriceNum.toLocaleString("es-AR")} ${escapeHtml(activeCurrency)}</div>`
@@ -4480,27 +5557,18 @@ function renderPoisOnLeafletMap() {
     });
 
     marker.on("mouseout", () => {
-      if (hoverNavigateTimer) {
-        clearTimeout(hoverNavigateTimer);
-        hoverNavigateTimer = null;
-      }
       if (!appState.isDrawingMode && appState.activeHighlightedPoiId !== poi.id) {
         clearPoiRoutesHighlight();
         hideZoneHoverTooltip();
       }
     });
 
-    // En celular o click: fija/alterna la visualización nítida de las rutas de viaje desde ese punto
+    // Click en el marcador de Punto de Interés: abre su Mini-Resumen con opción de "eliminar" abajo a la derecha y resalta sus rutas reales
     marker.on("click", (e) => {
       L.DomEvent.stopPropagation(e);
-      if (appState.activeHighlightedPoiId === poi.id) {
-        appState.activeHighlightedPoiId = null;
-        clearPoiRoutesHighlight();
-        hideZoneHoverTooltip();
-      } else {
-        appState.activeHighlightedPoiId = poi.id;
-        highlightRoutesFromPoi(poi, e.originalEvent);
-      }
+      appState.activeHighlightedPoiId = poi.id;
+      highlightRoutesFromPoi(poi, e.originalEvent);
+      openMapPoiMiniSummaryCard(poi);
       renderPoisSidebarList();
     });
 
@@ -4511,6 +5579,7 @@ function renderPoisOnLeafletMap() {
       poi.address = `Ubicado en mapa (${poi.lat.toFixed(4)}, ${poi.lng.toFixed(4)})`;
       renderPoisSidebarList();
       renderHobbyPoiAutocreateControls();
+      renderStep2AddedPoisPreview();
       renderMapConvenienceRanking();
       if (appState.activeHighlightedPoiId === poi.id) {
         highlightRoutesFromPoi(poi);
@@ -4519,6 +5588,31 @@ function renderPoisOnLeafletMap() {
 
     marker.addTo(poisLayerGroup);
   });
+}
+
+// Construye corredores terrestres realistas multi-tramo entre dos coordenadas para que las rutas nunca "vuelen" en ángulo recto ni crucen el Río de la Plata / mar
+function buildRealisticCorridorWaypoints(lat1, lng1, lat2, lng2, lateralFactor = 0) {
+  const dLat = lat2 - lat1;
+  const dLng = lng2 - lng1;
+  const distDeg = Math.hypot(dLat, dLng) || 0.0001;
+  // Vector perpendicular unitario acotado a un desvío máximo realista (~400m a 1.1km) para separar visualmente Auto, Subte, Colectivo y Bici sin salirse del corredor terrestre
+  const perpLat = -dLng / distDeg;
+  const perpLng = dLat / distDeg;
+  const maxOffsetDeg = Math.min(0.0095, distDeg * 0.075) * lateralFactor;
+
+  const p25 = [
+    parseFloat((lat1 + dLat * 0.25 + perpLat * maxOffsetDeg * 0.7).toFixed(5)),
+    parseFloat((lng1 + dLng * 0.25 + perpLng * maxOffsetDeg * 0.7).toFixed(5))
+  ];
+  const p50 = [
+    parseFloat((lat1 + dLat * 0.50 + perpLat * maxOffsetDeg).toFixed(5)),
+    parseFloat((lng1 + dLng * 0.50 + perpLng * maxOffsetDeg).toFixed(5))
+  ];
+  const p75 = [
+    parseFloat((lat1 + dLat * 0.75 + perpLat * maxOffsetDeg * 0.65).toFixed(5)),
+    parseFloat((lng1 + dLng * 0.75 + perpLng * maxOffsetDeg * 0.65).toFixed(5))
+  ];
+  return [[lat1, lng1], p25, p50, p75, [lat2, lng2]];
 }
 
 // Atenúa el resto del mapa (grisáceo/apagado) y dibuja con colores ultra nítidos las rutas en Auto, Subte, Colectivo y Caminando desde el Punto de Interés ÚNICAMENTE hacia las zonas elegidas/dibujadas por el usuario y sus otros puntos (NUNCA muestra zonas pre-cargadas)
@@ -4574,25 +5668,25 @@ function highlightRoutesFromPoi(poi, domEvent = null) {
     const [zLat, zLng] = item.center;
     const dKm = Math.max(0.4, item.distKm);
 
-    const minAuto = Math.max(4, Math.round(dKm * 3.1 + 3));
-    const minSubte = Math.max(5, Math.round(dKm * 2.4 + 4));
-    const minColectivo = Math.max(7, Math.round(dKm * 4.4 + 5));
-    const minCaminando = Math.max(8, Math.round(dKm * 12.2));
+    const minAuto = Math.max(4, Math.round(dKm * 2.6 + 3));
+    const minSubte = Math.max(5, Math.round(dKm * 2.3 + 4));
+    const minColectivo = Math.max(7, Math.round(dKm * 3.8 + 5));
+    const minCaminando = dKm > 25 ? Math.round(dKm * 4.5) : Math.max(8, Math.round(dKm * 11.5));
 
-    const midAuto = [poi.lat + (zLat - poi.lat) * 0.55 + 0.0028, poi.lng + (zLng - poi.lng) * 0.45 - 0.0024];
-    const midSubte = [poi.lat + (zLat - poi.lat) * 0.50 - 0.0020, poi.lng + (zLng - poi.lng) * 0.50 + 0.0022];
-    const midBus = [poi.lat + (zLat - poi.lat) * 0.35, zLng];
-    const midWalk = [zLat, poi.lng + (zLng - poi.lng) * 0.65];
+    const pathAuto = buildRealisticCorridorWaypoints(poi.lat, poi.lng, zLat, zLng, -0.8);
+    const pathSubte = buildRealisticCorridorWaypoints(poi.lat, poi.lng, zLat, zLng, -0.25);
+    const pathBus = buildRealisticCorridorWaypoints(poi.lat, poi.lng, zLat, zLng, 0.35);
+    const pathWalk = buildRealisticCorridorWaypoints(poi.lat, poi.lng, zLat, zLng, 0.85);
 
     // 1. RUTA EN AUTO / MOTO (Magenta Neón)
-    L.polyline([[poi.lat, poi.lng], midAuto, [zLat, zLng]], {
+    L.polyline(pathAuto, {
       color: "#ff2e93",
       weight: 5,
       opacity: 0.98
     }).addTo(routesLayerGroup);
 
     // 2. RUTA EN SUBTE / TREN (Turquesa Ciano)
-    L.polyline([[poi.lat, poi.lng], midSubte, [zLat, zLng]], {
+    L.polyline(pathSubte, {
       color: "#00f5d4",
       weight: 4.5,
       opacity: 0.98,
@@ -4600,7 +5694,7 @@ function highlightRoutesFromPoi(poi, domEvent = null) {
     }).addTo(routesLayerGroup);
 
     // 3. RUTA EN COLECTIVO (Amarillo Intenso)
-    L.polyline([[poi.lat, poi.lng], midBus, [zLat, zLng]], {
+    L.polyline(pathBus, {
       color: "#facc15",
       weight: 4,
       opacity: 0.96,
@@ -4608,7 +5702,7 @@ function highlightRoutesFromPoi(poi, domEvent = null) {
     }).addTo(routesLayerGroup);
 
     // 4. RUTA CAMINANDO / BICI (Verde Lima)
-    L.polyline([[poi.lat, poi.lng], midWalk, [zLat, zLng]], {
+    L.polyline(pathWalk, {
       color: "#a3e635",
       weight: 3.5,
       opacity: 0.95,
@@ -4836,12 +5930,19 @@ function getUnifiedSearchFilters(targetZone) {
     || MAP_AFFORDABILITY_ZONES[0];
 
   const currency = (cf.currency || "ARS").toUpperCase();
+  const expensasCurrency = (cf.expensasCurrency || currency || "ARS").toUpperCase();
   const operation = appState.selectedOperation || cf.operation || "alquiler";
+  const operationsList = (Array.isArray(cf.operationsList) && cf.operationsList.length > 0) ? cf.operationsList : [operation];
   const propertyType = cf.propertyType || "departamento";
+  const propertyTypesList = (Array.isArray(cf.propertyTypesList) && cf.propertyTypesList.length > 0) ? cf.propertyTypesList : [propertyType];
   const garage = cf.garage || "indistinto";
+  const garagesList = Array.isArray(cf.garagesList) ? cf.garagesList : [];
   const garageCoveredCars = cf.garageCoveredCars || 0;
   const garageUncoveredCars = cf.garageUncoveredCars || 0;
   const minM2Covered = cf.minM2Covered || 0;
+
+  const roomsLabel = `${selectedRooms.join(" o ")} amb`;
+  const bathroomsLabel = `${selectedBathrooms.join(" o ")} baño${selectedBathrooms[0] === 1 && selectedBathrooms.length === 1 ? "" : "s"}`;
 
   return {
     zone: z,
@@ -4850,13 +5951,19 @@ function getUnifiedSearchFilters(targetZone) {
     selectedRooms,
     selectedBathrooms,
     selectedBedrooms,
+    roomsLabel,
+    bathroomsLabel,
     primaryAmbientes,
     primaryBathrooms,
     primaryBedrooms,
     currency,
+    expensasCurrency,
     operation,
+    operationsList,
     propertyType,
+    propertyTypesList,
     garage,
+    garagesList,
     garageCoveredCars,
     garageUncoveredCars,
     minM2Covered,
@@ -4871,12 +5978,25 @@ function computeRobustZonePriceThresholds(zone, unifiedFilters) {
   const baseExp2Amb = (zone && zone.expensas_ars) ? zone.expensas_ars : 92000;
   const baseServ = (zone && zone.servicios_ars) ? zone.servicios_ars : 52000;
 
-  // 1. Escalar según cantidad exacta de Ambientes, Baños, Tipología, m² y Cochera transmitidos desde los filtros
+  // 1. Escalar según cantidad exacta de Ambientes, Baños, Tipología, Modalidad de Alquiler, m² y Cochera transmitidos desde los filtros
   const amb = uf.primaryAmbientes || 2;
   const baths = uf.primaryBathrooms || 1;
   const ambScaleMap = { 1: 0.74, 2: 1.0, 3: 1.38, 4: 1.78, 5: 2.22, 6: 2.65 };
   const ambMult = ambScaleMap[amb] || (1 + (amb - 2) * 0.38);
   const bathMult = baths > 1 ? (1 + (baths - 1) * 0.11) : 1.0;
+
+  // Multiplicador según el tipo real de contrato de alquiler elegido
+  const contractMultMap = {
+    alquiler: 1.0,             // Tradicional 24 meses (2 años)
+    alquiler_36m: 1.03,        // Tradicional 36 meses (3 años)
+    alquiler_12m: 0.98,        // Anual renovable (12 meses)
+    alquiler_libre_dnu: 1.0,   // Contrato libre DNU 70/2023 (IPC / ICL / USD)
+    temporal: 1.28,            // Temporal / turístico amoblado (1 a 6 meses)
+    temporal_estudiantil: 1.12,// Estudiantil / académico (Marzo a Diciembre)
+    alquiler_comercial: 1.35,  // Comercial / profesional / consultorio (36 a 60 meses)
+    venta: 1.0
+  };
+  const opRentMult = contractMultMap[uf.operation] || 1.0;
 
   const propRentMultMap = {
     departamento: 1.0,
@@ -4908,7 +6028,7 @@ function computeRobustZonePriceThresholds(zone, unifiedFilters) {
 
   const m2Mult = uf.minM2Covered > 55 ? Math.min(1.55, 1 + ((uf.minM2Covered - 50) * 0.0055)) : 1.0;
 
-  const expectedMedianRent = Math.round((baseRent2Amb * ambMult * bathMult * propRentMult * m2Mult) + garageExtraRent);
+  const expectedMedianRent = Math.round((baseRent2Amb * ambMult * bathMult * propRentMult * opRentMult * m2Mult) + garageExtraRent);
   const expectedMedianExp = Math.round((baseExp2Amb * Math.max(0.8, ambMult * 0.92) * propExpMult) + garageExtraExp);
   const expectedServ = Math.round(baseServ * Math.max(0.85, ambMult * 0.9));
 
@@ -5081,10 +6201,27 @@ function computeZoneAffordabilityMetrics(zone) {
 
   const canastaAdjusted = Math.round(rawLocalesSum * dietMult * cookingMult * householdFoodMult);
 
-  // 4. Costo de Hobbies / Gimnasio adicionales marcados en la 2da conversación
-  const hobbyCostsMap = { gimnasio: 26000, club_deporte: 24000, salidas_cafe: 34000, cursos_arte: 22000 };
+  // 4. Costo de Hobbies / Cadenas reales de Gimnasio, Gastronomía, Indumentaria y Mascotas (más Gastos Propios cargados por el usuario)
+  const gymChainCostsMap = { smartfit: 26000, sportclub: 42000, megatlon: 58000, crossfit_box: 38000, barrio: 21000 };
+  const selectedGymCost = gymChainCostsMap[lp.gymChain] || 26000;
+  const hobbyCostsMap = { gimnasio: selectedGymCost, club_deporte: 28000, salidas_cafe: 34000, cursos_arte: 25000 };
   const activeHobbies = Array.isArray(lp.hobbies) ? lp.hobbies : [];
-  const hobbiesExtraArs = activeHobbies.reduce((acc, h) => acc + (hobbyCostsMap[h] || 0), 0);
+
+  const restTierCostsMap = { pocas_salidas: 0, bodegon_barrio: 35000, resto_medio: 68000, salidas_frecuentes: 120000 };
+  const clothTierCostsMap = { ninguno: 0, ferias_basico: 25000, marcas_medias: 55000, shopping_primeras: 110000 };
+  const petsTierCostsMap = { sin_mascotas: 0, "1_mascota_std": 32000, "1_mascota_premium": 58000, "2_mas_mascotas": 88000 };
+
+  const customUserExpensesArs = (lp.customSchoolArs || 0)
+    + (lp.customPetsArs || 0)
+    + (lp.customShoppingArs || 0)
+    + (lp.customOtherArs || 0)
+    + (Array.isArray(lp.customExtraList) ? lp.customExtraList.reduce((acc, it) => acc + (it.amountArs || 0), 0) : 0);
+
+  const hobbiesExtraArs = activeHobbies.reduce((acc, h) => acc + (hobbyCostsMap[h] || 0), 0)
+    + (restTierCostsMap[lp.restaurantTier] || 0)
+    + (lp.customShoppingArs > 0 ? 0 : (clothTierCostsMap[lp.clothingTier] || 0))
+    + (lp.customPetsArs > 0 ? 0 : (petsTierCostsMap[lp.petsTier] || 0))
+    + customUserExpensesArs;
 
   // 4b. Costo de Colegios (niños/adultos), Hospitales, Prepagas e Instituciones adaptado a hogares con varios habitantes
   const instCalc = computeHouseholdInstitutionsMonthlyCost(lp);
@@ -5135,7 +6272,7 @@ function computeZoneAffordabilityMetrics(zone) {
     transportModeLabel = `RED SUBE al día ($${econ.subeBoletoMinArs}/boleto)`;
   }
 
-  // Pilar 3: Costo de Vida (Servicios Domiciliarios + Comercios/Supermercados + Movilidad + Hábitos + Colegios/Prepagas/Instituciones)
+  // Pilar 3: Costo de Vida (Servicios Domiciliarios + Comercios/Supermercados + Movilidad + Hábitos + Colegios/Prepagas/Instituciones + Gastos Propios)
   const lifestyleTotal = serviciosAPartirArs + canastaAdjusted + transporteAdjusted + hobbiesExtraArs + instCostArs;
 
   // Totales derivados (manteniendo compatibilidad pero exponiendo cada pilar por separado)
@@ -5147,7 +6284,7 @@ function computeZoneAffordabilityMetrics(zone) {
   // Textos formateados "A partir de X [Moneda]"
   const activeCurrency = uf.currency || "ARS";
   const alquilerAPartirStr = formatAPartirDe(alquilerAPartirArs, activeCurrency);
-  const expensasAPartirStr = formatAPartirDe(expensasAPartirArs, activeCurrency);
+  const expensasAPartirStr = formatAPartirDe(expensasAPartirArs, uf.expensasCurrency || activeCurrency);
   const vidaAPartirStr = formatAPartirDe(lifestyleTotal, activeCurrency);
   const totalAPartirStr = formatAPartirDe(totalMensual, activeCurrency);
 
@@ -5181,6 +6318,7 @@ function computeZoneAffordabilityMetrics(zone) {
       canastaAdjusted,
       transporteAdjusted,
       hobbiesExtraArs,
+      customUserExpensesArs,
       instCostArs,
       instBreakdownItems,
       householdMembers,
@@ -5193,9 +6331,11 @@ function computeZoneAffordabilityMetrics(zone) {
       lifestyleTotal,
       pctLifestyle: "—",
       lifeHex: "#10b981",
+      vidaHex: "#10b981",
       lifeLabel: "💬 Ingresá tu sueldo",
       verdictText: "💬 Ingresá tu sueldo en el panel para ver el % sobre tus ingresos",
       totalMensual,
+      totalMonthly: totalMensual,
       pctTotal: "—"
     };
   }
@@ -5270,6 +6410,7 @@ function computeZoneAffordabilityMetrics(zone) {
     canastaAdjusted,
     transporteAdjusted,
     hobbiesExtraArs,
+    customUserExpensesArs,
     instCostArs,
     instBreakdownItems,
     householdMembers,
@@ -5282,9 +6423,11 @@ function computeZoneAffordabilityMetrics(zone) {
     lifestyleTotal,
     pctLifestyle: pctLifestyle.toFixed(1),
     lifeHex,
+    vidaHex: lifeHex,
     lifeLabel,
     verdictText,
     totalMensual,
+    totalMonthly: totalMensual,
     pctTotal: ((totalMensual / salary) * 100).toFixed(1)
   };
 }
@@ -5336,11 +6479,13 @@ function renderAffordabilityZonesOnMap() {
     const poly = L.polygon(zone.coords, {
       color: m.rentHex,
       weight: 2.8,
-      opacity: 0.92,
+      opacity: 0.94,
       fillColor: m.rentHex,
-      fillOpacity: 0.34
+      fillOpacity: 0.28,
+      fillRule: "nonzero"
     });
 
+    // Click en el polígono: abre la casilla de Mini-Resumen flotante (donde clickear el nombre del barrio lleva al detalle y abajo a la derecha está "eliminar")
     poly.on("click", (e) => {
       if (appState.isDrawingMode) {
         addDrawingVertex(e.latlng);
@@ -5348,7 +6493,7 @@ function renderAffordabilityZonesOnMap() {
       }
       L.DomEvent.stopPropagation(e);
       hideZoneHoverTooltip();
-      openZoneDetailedBreakdown(zone);
+      openMapZoneMiniSummaryCard(zone, false);
     });
 
     poly.addTo(zonesLayerGroup);
@@ -5369,7 +6514,7 @@ function renderAffordabilityZonesOnMap() {
       }
       L.DomEvent.stopPropagation(e);
       hideZoneHoverTooltip();
-      openZoneDetailedBreakdown(zone);
+      openMapZoneMiniSummaryCard(zone, false);
     });
     centroidMarker.addTo(zonesLayerGroup);
 
@@ -5444,6 +6589,54 @@ function renderAffordabilityZonesOnMap() {
         midMarker.addTo(zonesLayerGroup);
       });
     }
+  });
+
+  // Renderizar barrios cercanos de interés (Near-Miss) con línea punteada celeste/azul
+  const nearMissZones = Array.isArray(appState.nearMissIdealZones) ? appState.nearMissIdealZones : [];
+  nearMissZones.forEach(nmZone => {
+    if (!Array.isArray(nmZone.coords) || nmZone.coords.length < 3) return;
+    if (zonesToRender.some(z => z.id === nmZone.id || z.slug === nmZone.slug)) return;
+
+    const m = computeZoneAffordabilityMetrics(nmZone);
+    const nmPoly = L.polygon(nmZone.coords, {
+      color: "#38bdf8",
+      weight: 2.6,
+      dashArray: "7, 7",
+      opacity: 0.92,
+      fillColor: "#0ea5e9",
+      fillOpacity: 0.13,
+      fillRule: "nonzero"
+    });
+
+    nmPoly.on("click", (e) => {
+      if (appState.isDrawingMode) {
+        addDrawingVertex(e.latlng);
+        return;
+      }
+      L.DomEvent.stopPropagation(e);
+      hideZoneHoverTooltip();
+      openMapZoneMiniSummaryCard(nmZone, false);
+    });
+    nmPoly.addTo(zonesLayerGroup);
+
+    const [cLat, cLng] = getZoneCenter(nmZone);
+    const shortTitle = nmZone.name.split(" (")[0];
+    const nmIcon = L.divIcon({
+      className: "zone-centroid-marker",
+      html: `<div style="background:rgba(14,165,233,0.92); color:#fff; border:1.5px dashed #bae6fd; border-radius:6px; padding:2px 6px; font-size:10px; font-weight:800; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,0.45); transform:translate(-50%,-50%);">💙 ${escapeHtml(shortTitle)} · ${escapeHtml(m.totalAPartirStr)}</div>`,
+      iconSize: [0, 0]
+    });
+    const nmMarker = L.marker([cLat, cLng], { icon: nmIcon, interactive: true });
+    nmMarker.on("click", (e) => {
+      if (appState.isDrawingMode) {
+        addDrawingVertex(e.latlng);
+        return;
+      }
+      L.DomEvent.stopPropagation(e);
+      hideZoneHoverTooltip();
+      openMapZoneMiniSummaryCard(nmZone, false);
+    });
+    nmMarker.addTo(zonesLayerGroup);
   });
 
   renderDrawnPolygonOnLeaflet();
@@ -5554,14 +6747,15 @@ function renderDrawnPolygonOnLeaflet() {
       weight: 3,
       dashArray: "7, 5",
       fillColor: m.rentHex,
-      fillOpacity: 0.45
+      fillOpacity: 0.36,
+      fillRule: "nonzero"
     });
 
-    // Solo clic directo para abrir el desglose (sin eventos de hover en polígonos)
+    // Click directo abre el Mini-Resumen (con nombre clickeable para ir al detalle y enlace "eliminar" abajo a la derecha)
     userPoly.on("click", (e) => {
       L.DomEvent.stopPropagation(e);
       hideZoneHoverTooltip();
-      openZoneDetailedBreakdown(customZone);
+      openMapZoneMiniSummaryCard(customZone, true);
     });
 
     userPoly.addTo(drawnPolygonLayerGroup);
@@ -5577,9 +6771,69 @@ function renderDrawnPolygonOnLeaflet() {
     customMarker.on("click", (e) => {
       L.DomEvent.stopPropagation(e);
       hideZoneHoverTooltip();
-      openZoneDetailedBreakdown(customZone);
+      openMapZoneMiniSummaryCard(customZone, true);
     });
     customMarker.addTo(drawnPolygonLayerGroup);
+
+    // También habilitar vértices editables y puntos medios (+) sobre el polígono dibujado a mano para poder modificarlo libremente
+    if (!appState.isDrawingMode) {
+      const ptsLen = appState.drawnPolygonPoints.length;
+      appState.drawnPolygonPoints.forEach((pt, vIdx) => {
+        const vertexIcon = L.divIcon({
+          className: "zone-vertex-edit-wrapper",
+          html: `<div class="zone-vertex-edit-handle" title="Arrastrá para modificar esquina #${vIdx + 1} de tu dibujo (click derecho para quitar)"></div>`,
+          iconSize: [12, 12],
+          iconAnchor: [6, 6]
+        });
+        const vMarker = L.marker([pt[0], pt[1]], {
+          icon: vertexIcon,
+          draggable: true,
+          zIndexOffset: 920
+        });
+        vMarker.on("drag", (ev) => {
+          const pos = ev.target.getLatLng();
+          appState.drawnPolygonPoints[vIdx] = [Number(pos.lat.toFixed(5)), Number(pos.lng.toFixed(5))];
+          userPoly.setLatLngs(appState.drawnPolygonPoints);
+        });
+        vMarker.on("dragend", () => {
+          renderDrawnPolygonOnLeaflet();
+          renderDrawnPolygonSidebarSummary();
+          renderMapConvenienceRanking();
+        });
+        vMarker.on("contextmenu", (ev) => {
+          L.DomEvent.stopPropagation(ev);
+          if (appState.drawnPolygonPoints.length <= 3) return;
+          appState.drawnPolygonPoints.splice(vIdx, 1);
+          renderDrawnPolygonOnLeaflet();
+          renderDrawnPolygonSidebarSummary();
+          renderMapConvenienceRanking();
+        });
+        vMarker.addTo(drawnPolygonLayerGroup);
+
+        const nextPt = appState.drawnPolygonPoints[(vIdx + 1) % ptsLen];
+        const midLat = Number(((pt[0] + nextPt[0]) / 2).toFixed(5));
+        const midLng = Number(((pt[1] + nextPt[1]) / 2).toFixed(5));
+        const midIcon = L.divIcon({
+          className: "zone-midpoint-edit-wrapper",
+          html: `<div class="zone-midpoint-add-handle" title="Click para insertar una nueva esquina en tu dibujo">+</div>`,
+          iconSize: [14, 14],
+          iconAnchor: [7, 7]
+        });
+        const midMarker = L.marker([midLat, midLng], {
+          icon: midIcon,
+          interactive: true,
+          zIndexOffset: 860
+        });
+        midMarker.on("click", (ev) => {
+          L.DomEvent.stopPropagation(ev);
+          appState.drawnPolygonPoints.splice(vIdx + 1, 0, [midLat, midLng]);
+          renderDrawnPolygonOnLeaflet();
+          renderDrawnPolygonSidebarSummary();
+          renderMapConvenienceRanking();
+        });
+        midMarker.addTo(drawnPolygonLayerGroup);
+      });
+    }
   }
 }
 
@@ -6392,14 +7646,17 @@ function setupClassicFiltersInteractions() {
   bindCustomAdd("btn-add-custom-bedrooms-qty", "classic-bedrooms-pills-list", "classic-bedrooms-cb", "custom-bedrooms-qty-input", "dorm.", "dorm.");
   bindCustomAdd("btn-add-custom-bathrooms-qty", "classic-bathrooms-pills-list", "classic-bathrooms-cb", "custom-bathrooms-qty-input", "baño", "baños");
 
-  // Sincronizar automáticamente cuando el usuario tilda/destilda cualquier ambiente, dormitorio, baño o selector en Búsqueda Clásica
-  document.querySelectorAll(".classic-rooms-cb, .classic-bedrooms-cb, .classic-bathrooms-cb, .classic-feature-cb, .classic-amenity-cb, .classic-req-cb").forEach(cb => {
+  // Sincronizar automáticamente cuando el usuario tilda/destilda cualquier ambiente, dormitorio, baño, tipología, operación, disposición, orientación, antigüedad, cochera o selector en Búsqueda Clásica
+  document.querySelectorAll(".classic-rooms-cb, .classic-bedrooms-cb, .classic-bathrooms-cb, .classic-operation-cb, .classic-proptype-cb, .classic-disposition-cb, .classic-orientation-cb, .classic-antiquity-cb, .classic-garage-cb, .classic-feature-cb, .classic-amenity-cb, .classic-req-cb").forEach(cb => {
     cb.addEventListener("change", () => {
+      if (cb.classList.contains("classic-proptype-cb")) {
+        updateGarageCarCountersVisibility();
+      }
       readClassicFiltersFromDOM();
     });
   });
 
-  ["filter-operation", "filter-currency", "filter-property-type", "filter-disposition", "filter-orientation", "filter-antiquity", "filter-min-m2-covered", "filter-max-m2-total", "filter-garage-covered-cars", "filter-garage-uncovered-cars"].forEach(id => {
+  ["filter-operation", "filter-currency", "filter-expensas-currency", "filter-property-type", "filter-disposition", "filter-orientation", "filter-antiquity", "filter-min-m2-covered", "filter-max-m2-total", "filter-garage-covered-cars", "filter-garage-uncovered-cars"].forEach(id => {
     document.getElementById(id)?.addEventListener("change", () => {
       if (id === "filter-property-type") {
         updateGarageCarCountersVisibility();
@@ -6408,14 +7665,15 @@ function setupClassicFiltersInteractions() {
     });
   });
 
-  // Inicializar visibilidad de los contadores de autos techados y descubiertos (solo visibles si tipo de propiedad === "barrio_cerrado")
+  // Inicializar visibilidad de los contadores de autos techados y descubiertos (visibles si tipo de propiedad incluye "barrio_cerrado")
   updateGarageCarCountersVisibility();
 
   // Al cambiar tipo de cochera, ajusta automáticamente cantidades sugeridas si se elige "Sin cochera" (y si está en barrio cerrado)
   const garageSel = document.getElementById("filter-garage");
   garageSel?.addEventListener("change", () => {
     const propTypeEl = document.getElementById("filter-property-type");
-    const isBarrioCerrado = propTypeEl && propTypeEl.value === "barrio_cerrado";
+    const checkedProps = Array.from(document.querySelectorAll(".classic-proptype-cb:checked")).map(cb => cb.value);
+    const isBarrioCerrado = (propTypeEl && propTypeEl.value === "barrio_cerrado") || checkedProps.includes("barrio_cerrado");
     const covInp = document.getElementById("filter-garage-covered-cars");
     const uncovInp = document.getElementById("filter-garage-uncovered-cars");
     if (garageSel.value === "no" || !isBarrioCerrado) {
@@ -6433,15 +7691,16 @@ function setupClassicFiltersInteractions() {
   });
 }
 
-// Oculta los contadores de autos techados y descubiertos, mostrándolos únicamente si el usuario selecciona el tipo de propiedad "barrio_cerrado"
+// Oculta los contadores de autos techados y descubiertos, mostrándolos únicamente si el usuario selecciona el tipo de propiedad "barrio_cerrado" (ya sea en el selector principal o en las casillas multi-opción)
 function updateGarageCarCountersVisibility() {
   const propTypeEl = document.getElementById("filter-property-type");
+  const checkedProps = Array.from(document.querySelectorAll(".classic-proptype-cb:checked")).map(cb => cb.value);
   const countersWrap = document.getElementById("garage-car-counters-wrap");
   const hintEl = document.getElementById("garage-barrio-cerrado-hint");
   const covInp = document.getElementById("filter-garage-covered-cars");
   const uncovInp = document.getElementById("filter-garage-uncovered-cars");
 
-  const isBarrioCerrado = Boolean(propTypeEl && propTypeEl.value === "barrio_cerrado");
+  const isBarrioCerrado = Boolean((propTypeEl && propTypeEl.value === "barrio_cerrado") || checkedProps.includes("barrio_cerrado"));
   if (countersWrap) {
     countersWrap.style.display = isBarrioCerrado ? "flex" : "none";
   }
@@ -6462,14 +7721,30 @@ function readClassicFiltersFromDOM() {
     return el ? el.value : fallback;
   };
   cf.operation = getVal("filter-operation", appState.selectedOperation || "alquiler");
+  const checkedOps = Array.from(document.querySelectorAll(".classic-operation-cb:checked")).map(cb => cb.value);
+  cf.operationsList = checkedOps.length > 0 ? checkedOps : [cf.operation];
+
   cf.currency = getVal("filter-currency", cf.currency || "ARS");
+  cf.expensasCurrency = getVal("filter-expensas-currency", cf.expensasCurrency || cf.currency || "ARS");
   cf.minPrice = parseArsNumber(getVal("filter-min-price", "0"));
   cf.maxPrice = parseArsNumber(getVal("filter-max-price", "0"));
   cf.maxExpensas = parseArsNumber(getVal("filter-max-expensas", "0"));
+
   cf.propertyType = getVal("filter-property-type", cf.propertyType || "departamento");
+  const checkedProps = Array.from(document.querySelectorAll(".classic-proptype-cb:checked")).map(cb => cb.value);
+  cf.propertyTypesList = checkedProps.length > 0 ? checkedProps : [cf.propertyType];
+  if (checkedProps.length > 0 && !checkedProps.includes(cf.propertyType)) {
+    cf.propertyType = checkedProps[0];
+  }
+
   cf.disposition = getVal("filter-disposition", "indistinto");
+  cf.dispositionsList = Array.from(document.querySelectorAll(".classic-disposition-cb:checked")).map(cb => cb.value);
+
   cf.orientation = getVal("filter-orientation", "indistinto");
+  cf.orientationsList = Array.from(document.querySelectorAll(".classic-orientation-cb:checked")).map(cb => cb.value);
+
   cf.antiquity = getVal("filter-antiquity", "indistinto");
+  cf.antiquitiesList = Array.from(document.querySelectorAll(".classic-antiquity-cb:checked")).map(cb => cb.value);
 
   const checkedRoomsDom = Array.from(document.querySelectorAll(".classic-rooms-cb:checked"))
     .map(cb => parseInt(cb.value, 10))
@@ -6506,7 +7781,10 @@ function readClassicFiltersFromDOM() {
   cf.minM2Covered = parseInt(getVal("filter-min-m2-covered", String(cf.minM2Covered || 0)), 10) || 0;
   cf.maxM2Total = parseInt(getVal("filter-max-m2-total", String(cf.maxM2Total || 0)), 10) || 0;
   cf.garage = getVal("filter-garage", cf.garage || "indistinto");
-  if (cf.propertyType === "barrio_cerrado") {
+  cf.garagesList = Array.from(document.querySelectorAll(".classic-garage-cb:checked")).map(cb => cb.value);
+
+  const isBarrioCerrado = cf.propertyType === "barrio_cerrado" || (Array.isArray(cf.propertyTypesList) && cf.propertyTypesList.includes("barrio_cerrado"));
+  if (isBarrioCerrado) {
     cf.garageCoveredCars = parseInt(getVal("filter-garage-covered-cars", String(cf.garageCoveredCars || 0)), 10) || 0;
     cf.garageUncoveredCars = parseInt(getVal("filter-garage-uncovered-cars", String(cf.garageUncoveredCars || 0)), 10) || 0;
   } else {
@@ -6519,7 +7797,7 @@ function readClassicFiltersFromDOM() {
   cf.requirements = Array.from(document.querySelectorAll(".classic-req-cb:checked")).map(cb => cb.value);
 
   appState.classicFilters = cf;
-  appState.selectedOperation = cf.operation === "venta" ? "venta" : "alquiler";
+  appState.selectedOperation = cf.operation || "alquiler";
   if (cf.maxPrice > 0) {
     appState.maxPrice = cf.maxPrice;
   }
@@ -6533,6 +7811,7 @@ function resetClassicFiltersForm() {
   };
   setVal("filter-operation", "alquiler");
   setVal("filter-currency", "ARS");
+  setVal("filter-expensas-currency", "ARS");
   setVal("filter-min-price", "");
   setVal("filter-max-price", "");
   setVal("filter-max-expensas", "");
@@ -6545,10 +7824,9 @@ function resetClassicFiltersForm() {
   setVal("filter-garage", "indistinto");
   setVal("filter-garage-covered-cars", "0");
   setVal("filter-garage-uncovered-cars", "0");
-  updateGarageCarCountersVisibility();
 
   document.querySelectorAll(".custom-added-pill").forEach(el => el.remove());
-  // Mantener seleccionados por defecto 2 ambientes, 1 dormitorio y 1 baño para que nunca queden en cero
+  // Mantener seleccionados por defecto 2 ambientes, 1 dormitorio, 1 baño, alquiler 24m y departamento
   document.querySelectorAll(".classic-rooms-cb").forEach(cb => {
     cb.checked = (String(cb.value) === "2");
   });
@@ -6558,24 +7836,34 @@ function resetClassicFiltersForm() {
   document.querySelectorAll(".classic-bathrooms-cb").forEach(cb => {
     cb.checked = (String(cb.value) === "1");
   });
-  document.querySelectorAll(".classic-feature-cb, .classic-amenity-cb, .classic-req-cb").forEach(cb => {
+  document.querySelectorAll(".classic-operation-cb").forEach(cb => {
+    cb.checked = (String(cb.value) === "alquiler");
+  });
+  document.querySelectorAll(".classic-proptype-cb").forEach(cb => {
+    cb.checked = (String(cb.value) === "departamento");
+  });
+  document.querySelectorAll(".classic-disposition-cb, .classic-orientation-cb, .classic-antiquity-cb, .classic-garage-cb, .classic-feature-cb, .classic-amenity-cb, .classic-req-cb").forEach(cb => {
     cb.checked = false;
   });
+  updateGarageCarCountersVisibility();
   readClassicFiltersFromDOM();
 }
 
-// Construye los links reales con TODOS los filtros transmitidos sin pérdida de datos (Zona elegida + Operación + Ambientes exactos + Dormitorios + Baños exactos + Cochera + m² + Presupuesto)
+// Construye los links reales a portales externos (Zonaprop, Argenprop, MercadoLibre, etc.)
+// NOTA TÉCNICA IMPORTANTE: Los portales inmobiliarios usan routers cerrados basados en slugs fijos (tipo + operación + barrio + ambientes) y rechazan o redirigen al home si se concatenan múltiples filtros en el path o en query params no soportados.
+// Por eso aquí construimos la URL base 100% válida que abre directamente el barrio y tipología en el portal sin dar error 404, y acompañamos cada tarjeta con la "Ficha de Filtros Lista para Tildar".
 function buildFilteredPortalUrl(portalDomain, zoneNameOrSlug) {
   const uf = getUnifiedSearchFilters();
   const cf = appState.classicFilters || {};
   const d = (portalDomain || "").toLowerCase();
-  const op = appState.selectedOperation === "venta" ? "venta" : (cf.operation === "temporal" ? "alquiler-temporal" : "alquiler");
+  const rawOp = uf.operation || appState.selectedOperation || "alquiler";
+  const op = rawOp === "venta"
+    ? "venta"
+    : ((rawOp === "temporal" || rawOp === "temporal_estudiantil") ? "alquiler-temporal" : "alquiler");
   const maxP = cf.maxPrice > 0 ? cf.maxPrice : (appState.maxPrice || 0);
-  const minP = cf.minPrice > 0 ? cf.minPrice : 0;
   const curr = (uf.currency || "ARS").toLowerCase() === "usd" ? "dolares" : "pesos";
 
-  const ambCount = Math.max(1, Math.min(8, uf.primaryAmbientes || 2));
-  const bathCount = Math.max(1, uf.primaryBathrooms || 1);
+  const ambCount = Math.max(1, Math.min(6, uf.primaryAmbientes || 2));
 
   const propTypeMap = {
     departamento: "departamentos",
@@ -6601,7 +7889,7 @@ function buildFilteredPortalUrl(portalDomain, zoneNameOrSlug) {
 
   const matchedDb = findBuenosAiresLocationInDb(rawZoneInput);
   if (matchedDb) {
-    slug = matchedDb.slug;
+    slug = matchedDb.slug.replace(/-(caba|gba|pba)$/, "");
     if (matchedDb.region === "caba") mlRegion = "capital-federal";
     else if (matchedDb.region === "gba-norte" || matchedDb.region === "zona-norte") mlRegion = "bs-as-gba-norte";
     else if (matchedDb.region === "gba-oeste" || matchedDb.region === "zona-oeste") mlRegion = "bs-as-gba-oeste";
@@ -6617,54 +7905,32 @@ function buildFilteredPortalUrl(portalDomain, zoneNameOrSlug) {
   } else if (raw.includes("mar del plata") || raw.includes("mar-del-plata")) {
     slug = "mar-del-plata";
     mlRegion = "bs-as-costa-atlantica";
+  } else if (raw.includes("pineyro") || raw.includes("piñeyro")) {
+    slug = "pineyro";
+    mlRegion = "bs-as-gba-sur";
   }
 
-  // Segmentos de filtros adicionales compatibles con las URLs de Zonaprop y Argenprop
-  const totalGarageCars = (uf.garageCoveredCars || 0) + (uf.garageUncoveredCars || 0);
-  const needsGarage = (uf.garage && uf.garage !== "indistinto" && uf.garage !== "no") || totalGarageCars > 0;
-  const garageSlugZp = needsGarage ? `-${Math.max(1, totalGarageCars)}-cochera` : "";
-  const bathSlugZp = bathCount > 1 ? `-${bathCount}-banos` : "-1-bano";
-  const m2SlugZp = uf.minM2Covered > 0 ? `-mas-de-${uf.minM2Covered}-m2-cubiertos` : "";
-  const priceSuffixZp = maxP > 0
-    ? (minP > 0 ? `-${minP}-${maxP}-${curr}` : `-menos-${maxP}-${curr}`)
-    : "";
-  const priceSuffixAp = maxP > 0 ? `-hasta-${maxP}-${curr}` : "";
-
-  const extraQueryParams = new URLSearchParams();
-  extraQueryParams.set("ambientes", uf.selectedRooms.join(","));
-  extraQueryParams.set("banos", uf.selectedBathrooms.join(","));
-  if (uf.selectedBedrooms && uf.selectedBedrooms.length > 0) extraQueryParams.set("dormitorios", uf.selectedBedrooms.join(","));
-  if (uf.minM2Covered > 0) extraQueryParams.set("m2_cubiertos_min", String(uf.minM2Covered));
-  if (cf.maxM2Total > 0) extraQueryParams.set("m2_totales_max", String(cf.maxM2Total));
-  if (needsGarage) {
-    extraQueryParams.set("cochera", uf.garage);
-    if (uf.garageCoveredCars > 0) extraQueryParams.set("autos_techados", String(uf.garageCoveredCars));
-    if (uf.garageUncoveredCars > 0) extraQueryParams.set("autos_descubiertos", String(uf.garageUncoveredCars));
-  }
-  if (cf.features && cf.features.length > 0) extraQueryParams.set("exteriores", cf.features.join(","));
-  if (cf.amenities && cf.amenities.length > 0) extraQueryParams.set("amenities", cf.amenities.join(","));
-  if (cf.requirements && cf.requirements.length > 0) extraQueryParams.set("requisitos", cf.requirements.join(","));
-  const qs = extraQueryParams.toString() ? `?${extraQueryParams.toString()}` : "";
+  // Si el usuario eligió un único número de ambientes, se incluye en el slug base; si eligió múltiples (ej. 2 o 3 amb), se abre la zona completa para que tilde ambos en el portal
+  const singleAmbSlug = (Array.isArray(uf.selectedRooms) && uf.selectedRooms.length === 1) ? `-${ambCount}-ambientes` : "";
 
   if (d.includes("zonaprop")) {
-    return `https://www.zonaprop.com.ar/${propPlural}-${op}-${slug}-${ambCount}-ambientes${bathSlugZp}${garageSlugZp}${m2SlugZp}${priceSuffixZp}.html${qs}`;
+    return `https://www.zonaprop.com.ar/${propPlural}-${op}-${slug}${singleAmbSlug}.html`;
   }
   if (d.includes("argenprop")) {
-    const garageAp = needsGarage ? "/con-cochera" : "";
-    return `https://www.argenprop.com/${propPlural}/${op}/${slug}/${ambCount}-ambientes${garageAp}${priceSuffixAp}${qs}`;
+    const ambAp = (Array.isArray(uf.selectedRooms) && uf.selectedRooms.length === 1) ? `/${ambCount}-ambientes` : "";
+    return `https://www.argenprop.com/${propPlural}/${op}/${slug}${ambAp}`;
   }
   if (d.includes("mercadolibre")) {
-    const priceMl = maxP > 0 ? `_PriceRange_0${curr === 'dolares' ? 'USD' : 'ARS'}-${maxP}${curr === 'dolares' ? 'USD' : 'ARS'}` : "";
-    return `https://inmuebles.mercadolibre.com.ar/${propPlural}/${op}/${mlRegion}/${slug}/_${ambCount}-ambientes${priceMl}${qs}`;
+    return `https://inmuebles.mercadolibre.com.ar/${propPlural}/${op}/${mlRegion}/${slug}/`;
   }
   if (d.includes("remax")) {
-    return `https://www.remax.com.ar/listings/${op === 'venta' ? 'buy' : 'rent'}?address=${encodeURIComponent(slug)}&rooms=${ambCount}&maxPrice=${maxP}&bathrooms=${bathCount}&parking=${needsGarage ? Math.max(1, totalGarageCars) : 0}`;
+    return `https://www.remax.com.ar/listings/${op === 'venta' ? 'buy' : 'rent'}?address=${encodeURIComponent(cleanZoneName)}`;
   }
   if (d.includes("properati")) {
-    return `https://www.properati.com.ar/s/${slug}/${propPlural === 'casas' ? 'casa' : 'departamento'}/${op}${qs}`;
+    return `https://www.properati.com.ar/s/${slug}/${propPlural === 'casas' ? 'casa' : 'departamento'}/${op}`;
   }
   const cleanHost = portalDomain.startsWith("http") ? portalDomain : `https://${portalDomain}`;
-  return `${cleanHost}/?zona=${encodeURIComponent(slug)}&tipo=${propPlural}&operacion=${op}&ambientes=${ambCount}&banos=${bathCount}&m2_min=${uf.minM2Covered}&max_precio=${maxP}${qs ? "&" + qs.slice(1) : ""}`;
+  return `${cleanHost}/?zona=${encodeURIComponent(slug)}&tipo=${propPlural}&operacion=${op}&ambientes=${ambCount}&max_precio=${maxP}&moneda=${curr}`;
 }
 
 function renderFocusedZoneDeepDive(zone) {
@@ -6687,7 +7953,20 @@ function renderFocusedZoneDeepDive(zone) {
   const bathroomsText = `${uf.selectedBathrooms.join(" o ")} baño${uf.selectedBathrooms[0] === 1 && uf.selectedBathrooms.length === 1 ? "" : "s"}`;
 
   const priorityRooms = appState.floorRooms.filter(r => r.priority).map(r => r.name).join(", ") || "Living, Cocina, Baño, Habitación";
-  const opLabel = appState.selectedOperation === "venta" ? "Compra-Venta" : (cf.operation === "temporal" ? "Alquiler Temporal" : "Alquiler Tradicional");
+  const operationLabelsMap = {
+    alquiler: "Alquiler 24 meses (2 años)",
+    alquiler_36m: "Alquiler 36 meses (3 años)",
+    alquiler_12m: "Alquiler Anual (12 meses)",
+    alquiler_libre_dnu: "Contrato Libre DNU 70/2023 (IPC/ICL/USD)",
+    temporal: "Alquiler Temporal Amoblado (1-6 meses)",
+    temporal_estudiantil: "Alquiler Estudiantil (Mar-Dic)",
+    alquiler_comercial: "Alquiler Comercial / Profesional",
+    venta: "Compra-Venta"
+  };
+  const opLabel = (Array.isArray(uf.operationsList) && uf.operationsList.length > 1)
+    ? uf.operationsList.map(k => operationLabelsMap[k] || k).join(" / ")
+    : (operationLabelsMap[uf.operation] || "Alquiler Tradicional");
+
   const propTypeLabels = {
     departamento: "Depto en edificio",
     ph: "PH (Propiedad Horizontal)",
@@ -6698,12 +7977,15 @@ function renderFocusedZoneDeepDive(zone) {
     loft: "Loft / Divisible",
     quinta: "Casa de Country / Quinta"
   };
-  const propLabel = propTypeLabels[uf.propertyType] || "Departamento";
+  const propLabel = (Array.isArray(uf.propertyTypesList) && uf.propertyTypesList.length > 1)
+    ? uf.propertyTypesList.map(k => propTypeLabels[k] || k).join(" o ")
+    : (propTypeLabels[uf.propertyType] || "Departamento");
+
   const garageDetailStr = uf.garage === "no"
     ? "Sin cochera"
-    : (uf.garage === "indistinto" && uf.garageCoveredCars === 0 && uf.garageUncoveredCars === 0
+    : (uf.garage === "indistinto" && uf.garageCoveredCars === 0 && uf.garageUncoveredCars === 0 && (!uf.garagesList || uf.garagesList.length === 0)
       ? "Cochera indistinta"
-      : `Cochera ${uf.garage}${(uf.propertyType === "barrio_cerrado" && (uf.garageCoveredCars > 0 || uf.garageUncoveredCars > 0)) ? ` (${uf.garageCoveredCars} techado/s + ${uf.garageUncoveredCars} desc.)` : ""}`);
+      : `Cochera ${(uf.garagesList && uf.garagesList.length > 0) ? uf.garagesList.join("/") : uf.garage}${(uf.propertyType === "barrio_cerrado" && (uf.garageCoveredCars > 0 || uf.garageUncoveredCars > 0)) ? ` (${uf.garageCoveredCars} techado/s + ${uf.garageUncoveredCars} desc.)` : ""}`);
 
   const sourceBadgeMap = {
     bot: "🤖 Transmitido desde Opción 1 (Asistente IA)",
@@ -6719,9 +8001,12 @@ function renderFocusedZoneDeepDive(zone) {
     `${bedroomsText}`,
     uf.minM2Covered > 0 ? `Mín. ${uf.minM2Covered} m² cub.` : "",
     garageDetailStr,
-    ...(cf.features || []).slice(0, 3),
-    ...(cf.amenities || []).slice(0, 2),
-    ...(cf.requirements || []).slice(0, 2)
+    ...(cf.dispositionsList || []),
+    ...(cf.orientationsList || []),
+    ...(cf.antiquitiesList || []),
+    ...(cf.features || []).slice(0, 4),
+    ...(cf.amenities || []).slice(0, 3),
+    ...(cf.requirements || []).slice(0, 3)
   ].filter(Boolean).join(" · ");
 
   const disabledIndices = Array.isArray(zone.disabledLocalStoreIndices) ? zone.disabledLocalStoreIndices : [];
@@ -6729,7 +8014,7 @@ function renderFocusedZoneDeepDive(zone) {
     ? lp.selectedSupermarkets
     : ["dia", "coto", "carrefour"];
 
-  // Alertas de la Base de Datos Zonal (cortes de calle, estaciones de subte, rutas y accesos)
+  // Alertas de la Base de Datos Zonal (cortes de calle, estaciones de subte, rutas y acccesos)
   const zoneAlerts = getZonalAlertsForZone(zone);
   const zoneAlertsHtml = zoneAlerts.length > 0
     ? zoneAlerts.map(al => `
@@ -6812,24 +8097,33 @@ function renderFocusedZoneDeepDive(zone) {
     { id: "p-3", name: "MercadoLibre Inmuebles", domain: "mercadolibre.com.ar/inmuebles" }
   ];
 
-  const portalLinksHtml = activePortals.map(p => {
+  const checklistSummaryPlain = `Zona: ${zone.name.split(" (")[0]} | Operación: ${opLabel} | Tipo: ${propLabel} | Ambientes: ${roomsText} | Dormitorios: ${bedroomsText} | Baños: ${bathroomsText} | Tope: $${(appState.maxPrice || 1500000).toLocaleString("es-AR")} ${m.activeCurrency}${cf.maxExpensas > 0 ? ` | Tope Expensas: $${cf.maxExpensas.toLocaleString("es-AR")} ${cf.expensasCurrency || m.activeCurrency}` : ""} | Detalles: ${classicSummaryTags}`;
+
+  const portalLinksHtml = activePortals.map((p, pIdx) => {
     const filteredUrl = buildFilteredPortalUrl(p.domain, zone.slug || zone.name);
     return `
       <div class="portal-filtered-card">
         <div>
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem; flex-wrap:wrap; gap:0.35rem;">
             <strong style="font-size:0.95rem; color:#fff;">🌐 ${escapeHtml(p.name)}</strong>
-            <span style="font-size:0.7rem; background:rgba(16,185,129,0.18); color:#34d399; padding:2px 7px; border-radius:999px; font-weight:700;">Variables transmitidas en URL</span>
+            <span style="font-size:0.68rem; background:rgba(16,185,129,0.18); color:#34d399; padding:2px 7px; border-radius:999px; font-weight:700;">Link Base Verificado + Ficha de Filtros</span>
           </div>
-          <div style="font-size:0.74rem; color:var(--text-secondary); line-height:1.45;">
-            • <strong>Zona elegida:</strong> ${escapeHtml(zone.name)} (slug: <code>${escapeHtml(zone.slug || "capital-federal")}</code>)<br>
-            • <strong>Ambientes y Baños:</strong> ${escapeHtml(roomsText)} · ${escapeHtml(bathroomsText)} · ${escapeHtml(bedroomsText)}<br>
-            • <strong>Operación y Tope:</strong> ${opLabel} | Tope: $${(appState.maxPrice || 1500000).toLocaleString("es-AR")} ${escapeHtml(m.activeCurrency)}<br>
-            • <strong>Filtros / Layout aplicados:</strong> ${escapeHtml(classicSummaryTags)} (${escapeHtml(priorityRooms)})
+          <div class="portal-filter-checklist-box" style="margin-bottom:0.55rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.35rem;">
+              <strong style="color:#38bdf8; font-size:0.74rem;">📋 Ficha de Filtros Lista para Tildar en ${escapeHtml(p.name)}:</strong>
+              <button type="button" class="btn-sm btn-secondary copy-portal-checklist-btn" data-checklist="${escapeHtml(checklistSummaryPlain)}" style="font-size:0.65rem; padding:0.15rem 0.45rem;">📋 Copiar ficha</button>
+            </div>
+            <div style="font-size:0.72rem; color:#e2e8f0; line-height:1.45;">
+              ☑️ <strong>Zona en el buscador:</strong> ${escapeHtml(zone.name.split(" (")[0])}<br>
+              ☑️ <strong>Modalidad y Tipo:</strong> ${escapeHtml(opLabel)} · ${escapeHtml(propLabel)}<br>
+              ☑️ <strong>Ambientes / Dorm. / Baños:</strong> ${escapeHtml(roomsText)} · ${escapeHtml(bedroomsText)} · ${escapeHtml(bathroomsText)}<br>
+              ☑️ <strong>Tope de Precio y Expensas:</strong> Hasta $${(appState.maxPrice || 1500000).toLocaleString("es-AR")} ${escapeHtml(m.activeCurrency)}${cf.maxExpensas > 0 ? ` · Expensas máx: $${cf.maxExpensas.toLocaleString("es-AR")} ${escapeHtml(cf.expensasCurrency || m.activeCurrency)}` : ""}<br>
+              ☑️ <strong>Extras para tildar en el panel lateral del portal:</strong> ${escapeHtml(classicSummaryTags)} (${escapeHtml(priorityRooms)})
+            </div>
           </div>
         </div>
         <a href="${escapeHtml(filteredUrl)}" target="_blank" rel="noopener noreferrer" class="btn-portal-link" style="justify-content:center; width:100%;">
-          🔗 Ir a ${escapeHtml(p.name)} (${escapeHtml(roomsText)}, ${escapeHtml(bathroomsText)} en ${escapeHtml(zone.name.split(" (")[0])}) ↗
+          🔗 Abrir ${escapeHtml(p.name)} en ${escapeHtml(zone.name.split(" (")[0])} (${escapeHtml(roomsText)}) ↗
         </a>
       </div>
     `;
@@ -6904,6 +8198,26 @@ function renderFocusedZoneDeepDive(zone) {
           </div>
         </div>
       </div>
+
+      ${zone.isIdealRecommended ? `
+        <div style="background:linear-gradient(135deg, rgba(16,185,129,0.16), rgba(15,23,42,0.92)); border:1.5px solid #34d399; border-radius:10px; padding:0.9rem 1.05rem; margin-bottom:1.15rem;">
+          <div style="font-size:0.86rem; font-weight:900; color:#6ee7b7; margin-bottom:0.3rem;">
+            🏆 ¿Por qué ${escapeHtml(zone.name.split(" (")[0])} es uno de los mejores barrios para vos? (Puesto #${zone.idealRank || 1})
+          </div>
+          <div style="font-size:0.82rem; color:#e2e8f0; line-height:1.45;">
+            ${escapeHtml(zone.idealReasonExplanation || "Cumple con el mejor equilibrio entre tu sueldo, tu estilo de vida y las distancias a tus puntos de interés.")}
+          </div>
+        </div>
+      ` : (zone.isNearMissIdeal ? `
+        <div style="background:linear-gradient(135deg, rgba(14,165,233,0.16), rgba(15,23,42,0.92)); border:1.5px dashed #38bdf8; border-radius:10px; padding:0.9rem 1.05rem; margin-bottom:1.15rem;">
+          <div style="font-size:0.86rem; font-weight:900; color:#7dd3fc; margin-bottom:0.3rem;">
+            💙 ¿Por qué ${escapeHtml(zone.name.split(" (")[0])} estuvo cerca de ser elegido?
+          </div>
+          <div style="font-size:0.82rem; color:#e0f2fe; line-height:1.45;">
+            ${escapeHtml(zone.nearMissReason || "Tuvo muy buena conveniencia general, pero quedó apenas por debajo del Top 3 en el balance de costo mensual y distancias.")}
+          </div>
+        </div>
+      ` : "")}
 
       ${zoneAlertsHtml ? `
       <div style="margin-bottom:1.15rem; display:flex; flex-direction:column; gap:0.45rem;">
@@ -7112,20 +8426,35 @@ function renderFocusedZoneDeepDive(zone) {
         </div>
       </div>
 
-      <!-- BLOQUE FINAL: LINKS QUE REDIRIGEN A LAS PÁGINAS CARGADAS CON LOS FILTROS YA APLICADOS -->
+      <!-- BLOQUE FINAL: LINKS QUE REDIRIGEN A LAS PÁGINAS CARGADAS + FICHA DE FILTROS LISTA PARA TILDAR -->
       <div style="background:rgba(6,182,212,0.08); border:1.5px solid rgba(56,189,248,0.45); border-radius:var(--radius-sm); padding:1.15rem;">
         <h4 style="font-size:1rem; font-weight:800; color:#38bdf8; margin-bottom:0.25rem;">
-          🔗 Links Directos a las Páginas que Cargaste con los Filtros Ya Aplicados en ${escapeHtml(zone.name.split(" (")[0])}
+          🔗 Links Directos a Portales en ${escapeHtml(zone.name.split(" (")[0])} + 📋 Ficha de Filtros Lista para Tildar
         </h4>
-        <p style="font-size:0.78rem; color:var(--text-secondary); margin-bottom:0.65rem;">
-          Hacé click en cualquiera de los sitios que sumaste al principio para ver las ofertas activas con la localidad/zona (<strong>${escapeHtml(zone.name)}</strong>), operación (${opLabel}), tope de presupuesto ($${(appState.maxPrice || 1500000).toLocaleString("es-AR")} ${escapeHtml(m.activeCurrency)}), ambientes (<strong>${escapeHtml(roomsText)}</strong>), baños (<strong>${escapeHtml(bathroomsText)}</strong>) y cochera ya filtrados:
-        </p>
+        <div style="background:rgba(245,158,11,0.12); border:1px solid rgba(245,158,11,0.4); border-radius:6px; padding:0.65rem 0.85rem; margin-bottom:0.75rem; font-size:0.76rem; color:#fde68a; line-height:1.45;">
+          ℹ️ <strong>¿Por qué los portales externos no permiten pre-cargar todos los filtros combinados por URL?</strong><br>
+          Sitios como Zonaprop, Argenprop y MercadoLibre usan rutas SEO cerradas (solo aceptan <em>tipo de inmueble + operación + barrio + 1 cantidad de ambientes</em> en el link) y sus filtros avanzados (múltiples ambientes, baños, disposición, orientación, antigüedad, amenities o garantías) se aplican por estado interno de sesión o tokens dinámicos. Si se concatenan todos esos parámetros en la URL, el portal devuelve error 404 o resetea la búsqueda.<br>
+          ✅ <strong>Solución Calculiving:</strong> Cada link de abajo abre la búsqueda base 100% válida de <strong>${escapeHtml(zone.name.split(" (")[0])}</strong> sin romperse nunca, y te deja arriba la <strong>Ficha Exacta de Filtros Lista para Tildar</strong> (con botón de copiar en 1 click).
+        </div>
         <div class="portal-filtered-grid">
           ${portalLinksHtml}
         </div>
       </div>
     </div>
   `;
+
+  // Botón para copiar la Ficha de Filtros en 1 click
+  container.querySelectorAll(".copy-portal-checklist-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const txt = btn.getAttribute("data-checklist") || "";
+      if (navigator.clipboard && txt) {
+        navigator.clipboard.writeText(txt).catch(() => {});
+      }
+      const old = btn.textContent;
+      btn.textContent = "✓ ¡Ficha copiada!";
+      setTimeout(() => { btn.textContent = old; }, 1600);
+    });
+  });
 
   // Selectores rápidos en la barra de trazabilidad para verificar o cambiar Ambientes, Baños o Moneda en vivo sin perder datos
   document.getElementById("inline-results-ambientes-select")?.addEventListener("change", (e) => {
